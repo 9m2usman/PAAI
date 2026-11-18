@@ -7,7 +7,11 @@ class AuthRepository:
     def __init__(self, database_path="data/paai_auth.db"):
         self.database_path = str(database_path)
         self.lock = threading.RLock()
-        if self.database_path != ":memory:":
+        self.uri = self.database_path == ":memory:"
+        if self.uri:
+            self.database_path = "file:paai_auth_%s?mode=memory&cache=shared" % uuid.uuid4().hex
+            self._keeper = sqlite3.connect(self.database_path, uri=True, check_same_thread=False)
+        else:
             Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
         with self.lock, self.connect() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS auth_users (
@@ -15,7 +19,7 @@ class AuthRepository:
                 password_hash TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
 
     def connect(self):
-        db = sqlite3.connect(self.database_path, timeout=15)
+        db = sqlite3.connect(self.database_path, timeout=15, uri=self.uri)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
         return db
