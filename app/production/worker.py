@@ -1,6 +1,9 @@
+import logging
 import signal
 import threading
 from app.identity.context import identity_scope
+
+logger = logging.getLogger(__name__)
 
 class AutonomyWorker:
     def __init__(self, runtime, poll_interval_seconds=5):
@@ -19,13 +22,19 @@ class AutonomyWorker:
         for principal in identities:
             if self.stop_event.is_set():
                 break
-            with identity_scope(principal):
-                results.extend(self.runtime.scheduler.run_due_once())
+            try:
+                with identity_scope(principal):
+                    results.extend(self.runtime.scheduler.run_due_once())
+            except Exception:
+                logger.exception("Autonomy worker tick failed for one tenant.")
         return results
 
     def run_forever(self):
         signal.signal(signal.SIGTERM, self.stop)
         signal.signal(signal.SIGINT, self.stop)
         while not self.stop_event.is_set():
-            self.run_once()
+            try:
+                self.run_once()
+            except Exception:
+                logger.exception("Autonomy worker polling cycle failed.")
             self.stop_event.wait(self.poll_interval_seconds)
