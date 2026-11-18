@@ -20,6 +20,7 @@ from app.execution.audit_logger import AuditLogger
 
 from app.workflows.workflow_manager import WorkflowManager
 from app.tools.integration_tool import IntegrationToolAdapter
+from app.agents.integration_workflow_agent import IntegrationWorkflowAgent
 
 
 def load_google_oauth_config():
@@ -125,6 +126,10 @@ def create_phase5_runtime(
     )
 
     integration_tool = IntegrationToolAdapter(execution_manager)
+    workflow_agent = IntegrationWorkflowAgent(
+        workflow_manager=workflow_manager,
+        integration_registry=integration_registry
+    )
 
     return {
         "integration_registry": integration_registry,
@@ -137,6 +142,7 @@ def create_phase5_runtime(
         "execution_manager": execution_manager,
         "workflow_manager": workflow_manager,
         "integration_tool": integration_tool,
+        "workflow_agent": workflow_agent,
         "browser_driver": browser_driver
     }
 
