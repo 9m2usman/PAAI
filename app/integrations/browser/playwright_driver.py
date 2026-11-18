@@ -40,7 +40,13 @@ class PlaywrightDriver:
         try:
             parsed = urlsplit(url)
 
-            if parsed.scheme != "https" or not parsed.hostname:
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.port not in (None, 443)
+                or parsed.username
+                or parsed.password
+            ):
                 return False
 
             hostname = parsed.hostname.lower()
