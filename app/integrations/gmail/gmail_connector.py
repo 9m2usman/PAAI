@@ -1,5 +1,6 @@
 import base64
 from email.message import EmailMessage
+from urllib.parse import quote
 
 from app.integrations.base_connector import BaseConnector
 from app.integrations.api_connector import APIConnector
@@ -56,13 +57,23 @@ class GmailConnector(BaseConnector):
 
         if action == "list_emails":
 
+            max_results = parameters.get("max_results", 10)
+
+            if not isinstance(max_results, int) or not 1 <= max_results <= 100:
+                raise ValueError("max_results must be an integer from 1 to 100.")
+
+            query = parameters.get("query", "")
+
+            if not isinstance(query, str):
+                raise ValueError("Gmail query must be text.")
+
             return self.api.execute(
                 "read",
                 {
                     "path": "gmail/v1/users/me/messages",
                     "query": {
-                        "maxResults": parameters.get("max_results", 10),
-                        "q": parameters.get("query", "")
+                        "maxResults": max_results,
+                        "q": query
                     }
                 },
                 credentials
@@ -80,7 +91,7 @@ class GmailConnector(BaseConnector):
                 {
                     "path": (
                         "gmail/v1/users/me/messages/"
-                        + message_id
+                        + quote(message_id, safe="")
                     ),
                     "query": {"format": "full"}
                 },
