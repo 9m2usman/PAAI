@@ -101,7 +101,7 @@ From `E:\\PAAI` in PowerShell:
 
 ```powershell
 .\\venv\\Scripts\\python.exe -m pip install -r requirements.txt
-.\\venv\\Scripts\\python.exe -m unittest tests.test_phase5_hardening -v
+.\\venv\\Scripts\\python.exe -m unittest discover -s tests -p "test_phase5_hardening.py" -v
 .\\venv\\Scripts\\python.exe -m unittest discover -s tests -v
 ```
 
