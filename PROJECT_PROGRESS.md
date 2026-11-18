@@ -8,7 +8,7 @@
 | 2 | Building the first autonomous agent | Implementation and automated checks reported complete; live autonomous demonstration was not explicitly confirmed |
 | 3 | Memory and personalization | Officially closed; 24 tests reported passing; phase documentation updated |
 | 4 | Multi-agent orchestration | Implementation and tests reported passing; final engineering review/assessment was not explicitly confirmed |
-| 5 | Real-world workflow execution | Original implementation reported complete; hardening changes and focused tests added on `phase5-hardening`; local test execution and phase closure pending |
+| 5 | Real-world workflow execution | Hardening implementation complete; focused Phase 5 tests and full project suite reported passing on `phase5-hardening`; documentation/engineering review and formal phase closure pending |
 | 6 | Multi-user agent infrastructure | Not started |
 | 7 | Advanced autonomy | Not started |
 | 8 | Production engineering | Not started |
@@ -19,7 +19,7 @@
 
 The Phase 5 hardening branch fixes runtime construction, opt-in browser setup, API redirect/path restrictions, OAuth state expiry, approval expiry, authenticated application-level integration binding, Gmail input validation, and workflow rejection audit risk. It adds `IntegrationWorkflowAgent`, which validates LLM-generated integration plans against registered actions and sends them through the approval-aware workflow manager. A focused Phase 5 regression test module covers these paths.
 
-The code has been committed to the separate GitHub branch `phase5-hardening`. The changes have not yet been run in the local Windows virtual environment. Do not merge or declare Phase 5 complete until local tests and the remaining acceptance criteria in `PHASE_5.md` are completed.
+The code has been committed to the separate GitHub branch `phase5-hardening`. The user reports that the focused Phase 5 suite and full project test suite both pass in the local Windows virtual environment. The mocked AI-to-Gmail approval workflow is covered by the focused tests. Manual Google OAuth and live Gmail/Calendar testing remain unconfirmed; see `PHASE_5.md` for the remaining review and closure criteria.
 
 ## Phase 5 implementation files
 
@@ -43,7 +43,7 @@ The code has been committed to the separate GitHub branch `phase5-hardening`. Th
 
 - Credential, approval, workflow, and audit stores are in memory only.
 - OAuth callback HTTP route is not implemented.
-- The existing planner does not yet pass integration arguments with trusted user identity; the integration adapter is therefore application-bound and must not be exposed as a global LLM tool.
+- `IntegrationWorkflowAgent` validates model-generated integration plans against registered connector actions and injects the trusted user identity from its application caller. Do not expose user identity as model-controlled arguments.
 - Browser context is not yet isolated per authenticated user.
 - Real Google API and browser tests require dedicated test accounts and explicit configuration.
 
