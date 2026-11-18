@@ -1,6 +1,6 @@
 # PAAI — Personal Autonomous Agent Infrastructure
 
-PAAI is a reusable autonomous-agent platform built as one continuous codebase. Its roadmap progresses from a first agent to memory, orchestration, real-world workflows, multi-user identity, advanced autonomy, and production engineering.
+PAAI is a reusable autonomous-agent codebase built as one continuous project. Its roadmap progresses from a first agent to memory, multi-agent orchestration, real-world workflows, multi-user identity, advanced autonomy, and production engineering.
 
 ## Roadmap
 
@@ -16,26 +16,20 @@ PAAI is a reusable autonomous-agent platform built as one continuous codebase. I
 ## Technology
 
 - Python and Groq LLM API
-- SQLite for the current learning-stage persistence layer
-- FastAPI and Uvicorn for the HTTP application
+- SQLite for memory, authentication, profiles, and autonomy records
 - Gmail and Google Calendar REST integrations
 - Playwright for optional allowlisted browser automation
-- Docker and GitHub Actions
 
 ## Project structure
 
 - `app/agents/` — agent implementations
 - `app/core/` — configuration, LLM client, and state
-- `app/memory/` — memory, personalization, authenticated memory facade
+- `app/memory/` — memory and personalization
 - `app/orchestration/` — multi-agent orchestration
 - `app/integrations/` — external service connectors and OAuth
-- `app/security/` and `app/access/` — credentials, permissions, authorization
-- `app/approvals/` — deterministic risk and approval management
-- `app/execution/` and `app/workflows/` — controlled integration execution
-- `app/auth/`, `app/identity/`, `app/tenancy/` — authentication and tenant identity
-- `app/autonomy/` — persistent goals, scheduler, policy, and autonomous execution
-- `app/api/` — FastAPI routes and request authentication
-- `app/production/` — settings, middleware, worker, logging, and encryption utility
+- `app/security/`, `app/access/`, `app/approvals/` — permissions and controlled execution
+- `app/auth/`, `app/identity/`, `app/tenancy/` — multi-user identity
+- `app/autonomy/` — persistent goals, scheduling, policy, and execution
 - `tests/` — automated tests
 
 ## Windows setup
@@ -49,22 +43,6 @@ Copy-Item .env.example .env
 
 Configure `GROQ_API_KEY` and set `PAAI_AUTH_SECRET` to a random value of at least 32 characters. Never commit `.env`.
 
-## Run the API
-
-```powershell
-.\\venv\\Scripts\\python.exe -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000
-```
-
-The API is available at `http://127.0.0.1:8000`. Interactive docs are disabled unless `PAAI_ENABLE_DOCS=true`.
-
-## Run the background worker
-
-```powershell
-.\\venv\\Scripts\\python.exe -m app.production.worker_main
-```
-
-The worker uses the same databases and authentication secret as the API.
-
 ## Run tests
 
 ```powershell
@@ -72,16 +50,16 @@ The worker uses the same databases and authentication secret as the API.
 .\\venv\\Scripts\\python.exe -m unittest discover -s tests -v
 ```
 
-## Safety model
+## Current phase
 
-- User identity comes from a verified bearer token, not an LLM response or request-body user ID.
-- Goal and memory operations derive tenant identity from the authenticated request context.
-- Phase 5 tool permissions and deterministic risk/approval rules remain the boundary for external side effects.
-- Phase 7's default goal executor is reasoning-only; it has no external tools.
-- Never place credentials or tokens in prompts or logs.
+**Phase 7 — Advanced Autonomy**
 
-## Production limitations
+The current implementation supports authenticated goal storage, manual and fixed-interval scheduled execution, pause/resume/cancel controls, run history, a bounded scheduler, and a safe reasoning-only default executor. External actions must use a trusted executor integrated with Phase 5 permission and approval controls.
 
-This repository contains a production-oriented application foundation, not proof of production readiness. The current deployment uses single-host SQLite. TLS ingress, managed secret storage, backups, monitoring/alerting, and a live deployment exercise remain host/operator responsibilities. The Fernet helper is not yet integrated into a durable encrypted OAuth credential vault. Approval APIs, distributed worker leases, PostgreSQL, and a shared queue are future hardening.
+The Phase 8 production blueprint is documented, but its API/deployment implementation is on the separate `phase8-production-engineering` branch.
 
-See [PHASE_7.md](PHASE_7.md), [PHASE_8.md](PHASE_8.md), and [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md).
+## Important limitations
+
+This is a learning-stage system, not a production deployment. The current goal scheduler uses single-host SQLite. Cron/weekday scheduling, durable external event dispatch, approval-resume integration, distributed workers, encrypted persistent OAuth credentials, and production API hosting remain future work.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md), [PHASE_7.md](PHASE_7.md), and [PHASE_8.md](PHASE_8.md).
