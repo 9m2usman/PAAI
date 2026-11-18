@@ -17,13 +17,16 @@ class BrowserConnector(BaseConnector):
 
         self.browser_driver = browser_driver
         self.allowed_domains = {
-            domain.strip().lower()
+            domain.strip().lower().lstrip(".")
             for domain in allowed_domains
             if isinstance(domain, str) and domain.strip()
         }
 
         if not self.allowed_domains:
             raise ValueError("Valid allowed domains are required.")
+
+        if hasattr(browser_driver, "set_allowed_domains"):
+            browser_driver.set_allowed_domains(self.allowed_domains)
 
     def get_supported_actions(self):
 
@@ -41,8 +44,13 @@ class BrowserConnector(BaseConnector):
 
         parsed = urlsplit(url)
 
-        if parsed.scheme != "https" or not parsed.hostname:
-            raise ValueError("Browser only supports HTTPS URLs.")
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+        ):
+            raise ValueError("Browser only supports safe HTTPS URLs.")
 
         hostname = parsed.hostname.lower()
 
@@ -64,11 +72,14 @@ class BrowserConnector(BaseConnector):
         if action == "open_page":
 
             url = self._validate_url(parameters.get("url"))
+            result = self.browser_driver.open_page(url)
 
-            return self.browser_driver.open_page(url)
+            final_url = result.get("url") if isinstance(result, dict) else None
+            self._validate_url(final_url)
+
+            return result
 
         if action == "extract_text":
-
             return self.browser_driver.extract_text()
 
         if action == "click":
@@ -78,7 +89,12 @@ class BrowserConnector(BaseConnector):
             if not isinstance(selector, str) or not selector.strip():
                 raise ValueError("Element selector is required.")
 
-            return self.browser_driver.click(selector)
+            result = self.browser_driver.click(selector)
+
+            current_url = self.browser_driver.current_url()
+            self._validate_url(current_url)
+
+            return result
 
         if action == "fill":
 
@@ -90,6 +106,8 @@ class BrowserConnector(BaseConnector):
 
             if not isinstance(value, str):
                 raise ValueError("Input value must be text.")
+
+            self._validate_url(self.browser_driver.current_url())
 
             return self.browser_driver.fill(selector, value)
 
