@@ -121,3 +121,8 @@ class SupervisorAgent:
                     task_id
                 )
             }
+
+    def run_for_current_identity(self, user_request):
+        from app.identity.context import current_identity
+        identity = current_identity()
+        return self.run(identity.user_id, user_request)
