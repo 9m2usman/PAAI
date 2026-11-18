@@ -49,6 +49,7 @@ class BrowserConnector(BaseConnector):
             or not parsed.hostname
             or parsed.username
             or parsed.password
+            or parsed.port not in (None, 443)
         ):
             raise ValueError("Browser only supports safe HTTPS URLs.")
 
