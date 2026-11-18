@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation hardening is in progress on branch `phase5-hardening`. The code and regression tests have been added, but the test suite has not yet been executed in the project's Windows virtual environment. Do not mark Phase 5 complete until local tests, an end-to-end workflow, documentation review, and the phase assessment are complete.
+Implementation hardening and automated testing are complete on branch `phase5-hardening`. The user reports that both the focused Phase 5 hardening tests and the complete project test suite pass in the Windows virtual environment. The mocked AI-to-Gmail draft/approval workflow is included in the focused suite. Manual Google OAuth and live Gmail/Calendar verification have not been confirmed. Documentation review, engineering review, and the Phase 5 assessment remain before formal closure.
 
 ## Goal
 
@@ -139,8 +139,8 @@ The tests mock external services. They must not send real emails, change a real 
 - [x] Workflow rejection records the actual risk level.
 - [x] Authenticated AI workflow planner validates model-generated integration plans.
 - [x] Focused Phase 5 regression tests are added.
-- [ ] Run focused and full test suites on Windows.
-- [ ] Complete a mocked end-to-end email draft/approval workflow test.
+- [x] Run focused and full test suites on Windows (user-reported passing).
+- [x] Complete a mocked end-to-end email draft/approval workflow test (included in the passing focused suite).
 - [ ] Complete a manual Google OAuth and Gmail/Calendar test using a dedicated test account.
 - [ ] Complete documentation and engineering review.
 - [ ] Complete the Phase 5 MCQ assessment and formally close the phase.
