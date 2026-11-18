@@ -649,6 +649,12 @@ class TestIntegrationExecution(unittest.TestCase):
             "high"
         )
 
+    def test_browser_click_is_high_risk(self):
+        self.assertEqual(
+            self.risk.classify("browser", "click", {"selector": "button"}),
+            "high"
+        )
+
 
 class TestWorkflowApproval(unittest.TestCase):
 
