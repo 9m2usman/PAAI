@@ -1,3 +1,7 @@
+import os
+
+from dotenv import load_dotenv
+
 from app.integrations.integration_registry import IntegrationRegistry
 from app.integrations.gmail.gmail_connector import GmailConnector
 from app.integrations.calendar.calendar_connector import CalendarConnector
@@ -18,6 +22,33 @@ from app.workflows.workflow_manager import WorkflowManager
 from app.tools.integration_tool import IntegrationToolAdapter
 
 
+def load_google_oauth_config():
+
+    load_dotenv()
+
+    config = {
+        "client_id": os.getenv("GOOGLE_CLIENT_ID", "").strip(),
+        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
+        "redirect_uri": os.getenv("GOOGLE_REDIRECT_URI", "").strip()
+    }
+
+    configured_values = [
+        bool(value)
+        for value in config.values()
+    ]
+
+    if not any(configured_values):
+        return None
+
+    if not all(configured_values):
+        raise ValueError(
+            "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, "
+            "and GOOGLE_REDIRECT_URI together in .env."
+        )
+
+    return config
+
+
 def create_phase5_runtime(
     google_oauth_config=None,
     enable_browser=False,
@@ -31,6 +62,9 @@ def create_phase5_runtime(
     approval_manager = ApprovalManager()
     risk_evaluator = RiskEvaluator()
     audit_logger = AuditLogger()
+
+    if google_oauth_config is None:
+        google_oauth_config = load_google_oauth_config()
 
     oauth_manager = None
 
