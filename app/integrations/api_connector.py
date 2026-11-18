@@ -75,8 +75,8 @@ class APIConnector(BaseConnector):
             or supplied_path.query
             or supplied_path.fragment
             or path.startswith("//")
-            or "\\\\" in path
-            or "\\x00" in path
+            or "\\" in path
+            or "\x00" in path
         ):
             raise ValueError("API path must be a relative path only.")
 
