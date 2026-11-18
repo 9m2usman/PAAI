@@ -29,7 +29,7 @@ Allow the trusted application layer to run real integration actions through a co
 | High | Always requires human approval; automatic permission cannot override this |
 | Unknown | Treated as high risk |
 
-High-risk examples include sending email, deleting or cancelling events, publishing, payments, and transfers. Medium-risk examples include creating drafts/events and updating records. The classification is deterministic and does not depend on the model's opinion.
+High-risk examples include sending email, deleting or cancelling events, publishing, payments, transfers, and browser clicks (which may submit or trigger an external action). Medium-risk examples include creating drafts/events and updating records. The classification is deterministic and does not depend on the model's opinion.
 
 An approval is tied to a SHA-256 fingerprint of the exact action data. Changing any parameter invalidates the approval. An approved action expires and may be consumed only once.
 
