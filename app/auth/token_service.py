@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import time
+from dotenv import load_dotenv
 
 def _enc(value):
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode()
@@ -13,6 +14,7 @@ def _dec(value):
 
 class TokenService:
     def __init__(self, secret=None, lifetime_seconds=3600):
+        load_dotenv()
         self.secret = secret or os.getenv("PAAI_AUTH_SECRET")
         if not self.secret or len(self.secret.encode()) < 32:
             raise ValueError("PAAI_AUTH_SECRET must contain at least 32 characters.")
