@@ -2,6 +2,7 @@ import json
 import sqlite3
 import threading
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
@@ -27,11 +28,16 @@ class GoalRepository:
                 FOREIGN KEY(goal_id) REFERENCES autonomy_goals(goal_id))""")
             db.execute("CREATE INDEX IF NOT EXISTS idx_autonomy_runs ON autonomy_runs(owner_id, goal_id, started_at)")
 
+    @contextmanager
     def _connect(self):
         db = sqlite3.connect(self.database_path, timeout=20)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
-        return db
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def _owner(self):
         return current_identity().user_id
