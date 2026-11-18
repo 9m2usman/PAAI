@@ -13,5 +13,18 @@ services:
     restart: unless-stopped
     init: true
 
+  worker:
+    build: .
+    command: ["python", "-m", "app.production.worker_main"]
+    env_file: .env
+    environment:
+      PAAI_DATA_DIR: /srv/paai/data
+    volumes:
+      - paai-data:/srv/paai/data
+    restart: unless-stopped
+    init: true
+    depends_on:
+      - api
+
 volumes:
   paai-data:
