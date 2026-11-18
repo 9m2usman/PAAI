@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import contextmanager
 import threading
 from pathlib import Path
 from app.identity.context import current_identity
@@ -13,10 +14,14 @@ class ProfileService:
             db.execute("""CREATE TABLE IF NOT EXISTS authenticated_user_profiles (
                 user_id TEXT PRIMARY KEY, display_name TEXT NOT NULL DEFAULT '',
                 preferences TEXT NOT NULL DEFAULT '{}', updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    @contextmanager
     def connect(self):
         db = sqlite3.connect(self.database_path, timeout=15)
         db.row_factory = sqlite3.Row
-        return db
+        try:
+            yield db
+        finally:
+            db.close()
     def get_profile(self):
         uid = current_identity().user_id
         with self.lock, self.connect() as db:
