@@ -21,6 +21,8 @@ class AutonomyEngine:
                     "max_steps": min(goal["max_steps"], self.policy.max_steps),
                     "max_runtime_seconds": min(goal["max_runtime_seconds"], self.policy.max_runtime_seconds),
                 })
+                if result is None or result == "":
+                    raise RuntimeError("Autonomy executor returned an empty result.")
                 elapsed = time.monotonic() - started
                 if elapsed > min(goal["max_runtime_seconds"], self.policy.max_runtime_seconds):
                     outcome = self.repository.finish_run(run_id, "budget_exhausted", error="Execution time budget exceeded.")
