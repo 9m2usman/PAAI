@@ -1,53 +1,89 @@
 # Phase 6 — Multi-User Agent Infrastructure
 
 ## Objective
-Provide a shared PAAI runtime with independently authenticated users and backend-enforced isolation for identity, profiles, memory access boundaries, credentials, and permissions.
+
+Provide one shared PAAI runtime for independently authenticated users. Identity, profiles, long-term memory, credentials, and permissions must remain scoped to the authenticated user.
 
 ## Architecture
-Authentication verifies email/password credentials and issues short-lived HS256 bearer tokens. The token verifier checks signature, algorithm, expiry, subject, and email, then resolves the account from SQLite. The resulting IdentityContext is installed for a request with identity_scope. ContextVar keeps concurrent request identities separate.
 
-TenantGuard and AuthorizationService read the current identity rather than accepting an identity selected by an LLM. ProfileService obtains its user ID from the verified context. CredentialManager and PermissionManager retain per-user keys and are protected by re-entrant locks.
+1. Email/password registration and login use PBKDF2 password hashing and a SQLite account repository.
+2. The token service issues signed HS256 bearer tokens with an expiry. Authentication verifies the token and confirms that its subject and email still match an account in the database.
+3. The application authenticates a bearer token with `runtime.authenticate(token)`, then installs the returned identity for the request using `identity_scope(identity)`.
+4. `ContextVar` keeps the current identity separate between concurrent execution contexts.
+5. `ProfileService` and `AuthenticatedMemoryService` derive the user ID from the current identity. Their public methods do not accept a caller-selected user ID.
+6. `AuthorizationService` binds permission and credential operations to the current identity. The underlying credential and permission managers use per-user keys and thread locks.
+7. The shared runtime composes these services. It does not create a separate agent instance for each user.
 
 ## Modules
-- app/auth: PBKDF2 password hashing, SQLite account repository, token signing/verification, registration and login.
-- app/identity: Principal, IdentityContext, request-local identity scope.
-- app/tenancy: ownership guard.
-- app/access: permission facade bound to current identity.
-- app/profiles: authenticated profile persistence.
-- app/runtime: shared service composition.
-- app/security: thread-safe credential and permission managers.
-- tests/phase6: authentication, identity, tenant, authorization, profile, tool, concurrency, and end-to-end tests.
+
+- `app/auth/`: password hashing, SQLite account repository, token signing/verification, registration and login.
+- `app/identity/`: Principal, IdentityContext, and request-local identity scope.
+- `app/tenancy/`: ownership guard.
+- `app/access/`: identity-bound permission and credential facade.
+- `app/profiles/`: authenticated profile persistence.
+- `app/memory/authenticated_memory.py`: authenticated facade over the Phase 3 memory store.
+- `app/runtime/`: shared multi-user service composition.
+- `app/security/`: thread-safe user-scoped credential and permission managers.
+- `tests/phase6/`: authentication, identity, tenant, authorization, profile/memory isolation, tool isolation, concurrency, and end-to-end tests.
 
 ## Usage
-Create a MultiUserRuntime with a persistent SQLite path and a random secret of at least 32 characters. Store the secret in PAAI_AUTH_SECRET; never commit it.
 
-Register:
+Create one shared runtime with a persistent SQLite account path and a random secret of at least 32 characters. Set the secret in `PAAI_AUTH_SECRET`; never commit it.
+
+Register and authenticate:
+
 ```python
 result = runtime.auth.register("person@example.com", "a-long-password")
-```
+identity = runtime.authenticate(result["access_token"])
 
-Authenticate each incoming bearer token:
-```python
-identity = runtime.authenticate(access_token)
 with identity_scope(identity):
     profile = runtime.profiles.get_profile()
+    memories = runtime.memory.get_memories()
+    runtime.memory.save_memory("language", "English")
+    access = runtime.authorization()
 ```
 
-Only call authenticated services inside the identity scope. Do not accept a user ID from model output or an untrusted request body as proof of identity.
+The identity scope belongs at the trusted application boundary for each request. Never accept a user ID from model output or an untrusted request body as proof of identity. The authenticated memory service deliberately exposes no user-ID parameter.
 
 ## Security boundaries and limitations
-- HS256 tokens are signed and expire, but there is no refresh-token or revocation system yet.
-- HTTP middleware/API server that extracts bearer tokens and installs identity_scope is Phase 8 work. Until then, callers must use runtime.authenticate(token) and identity_scope correctly.
-- Python objects are not a security boundary: code running inside the process can instantiate Principal. Only verified tokens at the application boundary establish trusted identity.
-- CredentialManager and PermissionManager are thread-safe but remain in-memory; credentials are not encrypted or durable.
-- Existing Phase 3 memory functions accept user IDs. Application entry points must derive the ID from current_identity and never forward a caller-selected ID. A dedicated authenticated memory facade and durable tenant controls remain future hardening.
-- Workflows, approvals, audit logs, and browser contexts are not yet durable or comprehensively isolated across processes.
-- SQLite is suitable for this learning-stage single-host implementation; production multi-process deployment requires a deliberate shared persistence strategy.
 
-## Tests
-Run all tests from the project root:
+- HS256 tokens are signed and expire, but refresh-token rotation, revocation, and account logout invalidation are not implemented.
+- HTTP middleware/API server that extracts bearer tokens and installs `identity_scope` is Phase 8 work. Until then, callers must authenticate the token and establish the scope correctly.
+- Python objects are not a security boundary: code running inside the process can instantiate a Principal. Only a token verified by the authentication service at the application boundary establishes trusted identity.
+- CredentialManager and PermissionManager are thread-safe but remain in-memory; credentials are not encrypted or durable.
+- The original low-level Phase 3 memory functions still accept a user ID for internal use. Application entry points should use `runtime.memory`, whose methods derive the ID from the authenticated identity.
+- Workflows, approvals, audit logs, OAuth state, and browser contexts are not yet durable or comprehensively isolated across processes.
+- SQLite is suitable for this learning-stage single-host implementation. Production multi-process deployment needs a deliberate shared persistence strategy and stronger operational controls.
+- Password reset, email verification, rate limiting, and account lockout are not implemented.
+
+## Verification
+
+Run the complete test suite from the project root in PowerShell:
+
 ```powershell
-.\venv\Scripts\python.exe -m unittest discover -s tests -v
+.\\venv\\Scripts\\python.exe -m unittest discover -s tests -v
 ```
 
-Phase 6 is not closed until the complete suite passes, the runtime is exercised with two users, docs are reviewed, and the engineering MCQ assessment is completed.
+The Phase 6 tests verify registration/login, invalid credentials, token tampering/expiry, identity scoping, tenant checks, profile and actual Phase 3 memory isolation, credential/permission isolation, concurrent identity separation, and a two-user runtime flow.
+
+## Engineering review
+
+The review confirmed the shared runtime and request-local identity design, signed expiring tokens, backend-derived profile and memory ownership, and per-user permission/credential scoping. It also identified that the original memory-isolation test only covered profiles. The authenticated memory facade and expanded tests close that specific acceptance gap.
+
+The implementation remains a learning-stage multi-user foundation, not a production security boundary. In particular, the HTTP authentication boundary, durable encrypted credentials, durable workflow/approval/audit stores, cross-process coordination, token revocation, and live external-provider verification remain later work.
+
+## Phase 6 completion checklist
+
+- [x] Email/password registration and login with PBKDF2 password hashing.
+- [x] Signed HS256 access tokens with expiry and account lookup.
+- [x] Request-local authenticated identity context.
+- [x] Backend tenant ownership checks.
+- [x] Authenticated profile service.
+- [x] Authenticated facade for the Phase 3 memory store.
+- [x] User-scoped credentials and permissions.
+- [x] Concurrent request identity separation.
+- [x] Two-user integration coverage.
+- [ ] User reruns the complete test suite after the memory-isolation remediation.
+- [ ] Engineering MCQ assessment completed.
+- [ ] User confirms Phase 6 closure.
+
