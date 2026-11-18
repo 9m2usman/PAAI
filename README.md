@@ -32,6 +32,7 @@ PAAI is a reusable autonomous-agent codebase. Its roadmap builds from a single a
 - `app/approvals/` — deterministic risk and approval management
 - `app/execution/` — controlled action execution and audit records
 - `app/workflows/` — ordered workflow execution
+- `app/agents/integration_workflow_agent.py` — validated LLM planning for real-world integration workflows
 - `app/documents/` — document processing
 - `tests/` — automated tests
 
