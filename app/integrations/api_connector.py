@@ -75,6 +75,8 @@ class APIConnector(BaseConnector):
             or supplied_path.query
             or supplied_path.fragment
             or path.startswith("//")
+            or "\\\\" in path
+            or "\\x00" in path
         ):
             raise ValueError("API path must be a relative path only.")
 
@@ -128,7 +130,17 @@ class APIConnector(BaseConnector):
             if not isinstance(key, str) or not isinstance(value, str):
                 raise ValueError("Invalid API header.")
 
-            if key.lower() in self.RESTRICTED_HEADERS:
+            normalized_key = key.strip().lower()
+
+            if (
+                not key
+                or key != key.strip()
+                or not key.isascii()
+                or not key.replace("-", "").isalnum()
+            ):
+                raise ValueError("Invalid API header name.")
+
+            if normalized_key in self.RESTRICTED_HEADERS:
                 raise ValueError("Restricted API header.")
 
             safe_headers[key] = value
