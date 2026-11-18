@@ -91,7 +91,9 @@ class GoalRepository:
         now = datetime.now(timezone.utc).isoformat()
         claimed = []
         with self.lock:
-            db = self._connect()
+            db = sqlite3.connect(self.database_path, timeout=20)
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA foreign_keys=ON")
             try:
                 db.execute("BEGIN IMMEDIATE")
                 rows = db.execute("""SELECT * FROM autonomy_goals
