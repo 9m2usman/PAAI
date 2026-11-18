@@ -106,6 +106,8 @@ class GoogleOAuthManager:
             self.pending_states.pop(state, None)
             raise PermissionError("Invalid or expired OAuth state.")
 
+        self.pending_states.pop(state, None)
+
         token_data = self._send_token_request({
             "code": code,
             "client_id": self.client_id,
@@ -132,8 +134,6 @@ class GoogleOAuthManager:
         self.credential_manager.store_credentials(
             user_id, "calendar", credentials
         )
-
-        self.pending_states.pop(state, None)
 
         return {
             "status": "connected",
