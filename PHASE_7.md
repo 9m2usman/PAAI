@@ -1,131 +1,78 @@
 # Phase 7 — Advanced Autonomy
 
-## Purpose
+## Goal
 
-Move PAAI from a request/response agent system to a controlled, goal-driven system that can retain goals, schedule future work, react to trusted events, execute through the existing agent/workflow infrastructure, pause for human approval, recover safely, and report what happened.
+Move PAAI from request/response interaction toward persistent, goal-driven execution. A user can save goals, schedule one-time or recurring runs, manually trigger a run, pause/resume/cancel goals, and inspect run history. Execution is bounded by deterministic policy and records outcomes.
 
-This phase builds autonomy controls and orchestration. It does not expose a public HTTP service or claim production deployment; those belong to Phase 8.
+## Architecture
 
-## Product behavior
+- `app/autonomy/models.py`: goal/run domain models and status vocabulary.
+- `app/autonomy/goal_repository.py`: SQLite goal/run persistence; every user-facing operation obtains the owner from `current_identity()`. Due work is claimed in an atomic SQLite transaction.
+- `app/autonomy/goal_service.py`: validation and goal lifecycle operations.
+- `app/autonomy/policy.py`: hard limits for description size, step budget, runtime budget, retry count, event payload size, and due-goal batch size.
+- `app/autonomy/triggers.py`: allowlisted event type validation and payload size checks.
+- `app/autonomy/agent_executor.py`: safe default reasoning-only executor. It has no external tools and must not claim side effects.
+- `app/autonomy/engine.py`: claims due goals, invokes the injected executor, and persists completed, failed, approval-waiting, or budget-exhausted outcomes.
+- `app/autonomy/scheduler.py`: explicit one-tick scheduler; it does not start an unmanaged background thread.
+- `app/runtime/multi_user_runtime.py`: composes autonomy services with the existing authenticated PAAI runtime.
 
-A user can create a goal such as:
-- "Every weekday morning, review my latest work inbox and prepare a summary."
-- "When a trusted event says a report is ready, analyze it and prepare a draft."
-- "Research this topic and continue until the defined completion condition or execution budget is reached."
+## Supported behavior
 
-The system stores the goal under the authenticated user, its schedule/trigger, status, execution history, and next run time. A goal can be paused, resumed, cancelled, inspected, and manually run. A run is bounded by policy and recorded. High-risk external actions remain subject to the existing Phase 5 approval system.
-
-## Architecture and module responsibilities
-
-### 1. Goal domain and persistence
-- `app/autonomy/models.py`: validated goal/run data structures and lifecycle states.
-- `app/autonomy/goal_repository.py`: SQLite persistence for goals and run history. Every public query derives the tenant from `current_identity()`; no caller-supplied user ID.
-- Persist schedule, recurrence, trigger metadata, budget, timestamps, status, last result, and next run.
-
-### 2. Goal application service
-- `app/autonomy/goal_service.py`: create, list, get, pause, resume, cancel, and request immediate execution.
-- Enforce ownership through authenticated repository methods.
-- Validate schedules and limits before saving.
-
-### 3. Trigger system
-- `app/autonomy/triggers.py`: typed manual, scheduled, and trusted-event triggers.
-- `app/autonomy/trigger_registry.py`: allowlisted event types and deterministic matching.
-- External systems do not execute arbitrary code by publishing event payloads. Event payloads are data, validated against registered event schemas.
-
-### 4. Autonomy policy
-- `app/autonomy/policy.py`: deterministic maximum runs, maximum steps, execution time budget, retry limits, and allowed autonomy mode.
-- Never allow an LLM to raise its own budget or grant itself permissions.
-- Never retry an action with external side effects unless its executor declares it idempotent and supplies a stable idempotency key.
-
-### 5. Execution engine
-- `app/autonomy/engine.py`: claims due goals, creates run records, calls an injected executor, records outcomes, schedules the next occurrence, and pauses on approval.
-- The executor is an application dependency. The model is not allowed to select a tenant, bypass authorization, or call arbitrary Python.
-- A run may finish as completed, failed, awaiting approval, cancelled, or budget exhausted.
-
-### 6. Scheduler
-- `app/autonomy/scheduler.py`: deterministic `run_due_once()` polling primitive. Phase 8 will host it in a supervised background worker. No unmanaged daemon thread is started by importing application modules.
-
-### 7. Runtime integration
-- Extend `MultiUserRuntime` to compose the goal repository, service, trigger registry, policy, engine, and scheduler.
-- Keep the Phase 1–6 agent, memory, integration, approval, and identity modules reusable. Avoid a second parallel agent stack.
+- Manual goals can be created and run on demand.
+- Scheduled goals support one-time ISO-8601 timestamps and fixed recurring intervals (minimum 60 seconds).
+- Users can list, inspect, pause, resume, cancel, and request a run for their own goals.
+- Run history is persisted separately from goal state.
+- The Phase 8 worker can iterate trusted principals from the authentication repository and execute one scheduler tick in each user's identity scope.
+- Default execution is reasoning-only through the configured Groq model. A trusted application may inject a different executor, but it must enforce tool permissions, Phase 5 risk/approval rules, tenant ownership, idempotency, and the supplied budgets.
 
 ## Data flow
 
-1. An authenticated application request installs `identity_scope`.
-2. GoalService validates the request and stores a tenant-owned goal.
-3. Scheduler finds due goals and the engine claims one atomically.
-4. Engine checks policy and creates a durable run record.
-5. The injected task executor calls the existing PAAI planner/agent or Phase 5 workflow layer.
-6. Any approval requirement pauses the goal/run; the user must approve through the trusted application boundary.
-7. Engine stores result/error, next run time, and audit metadata.
-8. User reads only their own goal and run history.
+1. An authenticated request installs `identity_scope`.
+2. GoalService validates and persists a goal under the current user.
+3. The scheduler queries and atomically claims due goals for that identity.
+4. The engine creates/updates a run and invokes the configured executor with bounded limits.
+5. The outcome is stored; recurring completed goals receive their next interval time.
+6. User-facing reads always filter by the current authenticated identity.
 
-## Execution lifecycle
+## Safety and failure handling
 
-`active → running → completed`
+- LLM output cannot set user IDs, change policy limits, grant permissions, or select arbitrary Python callables.
+- The default executor has no external tools; external side effects require an explicitly injected trusted executor.
+- The existing Phase 5 deterministic risk evaluator and approval manager remain the required safety boundary for integrations.
+- Run history stores bounded error text, not credential values.
+- Due-goal claims use a database transaction to reduce duplicate runs.
+- SQLite is single-host storage; distributed worker leases and cross-host scheduling are not provided.
+- The runtime budget is checked after the executor returns; a custom executor must enforce a hard timeout itself.
 
-Other terminal or paused states:
-- `paused`: user or policy paused the goal.
-- `awaiting_approval`: a side-effecting step needs explicit approval.
-- `failed`: execution failed after safe retry policy.
-- `cancelled`: user cancelled the goal.
-- `budget_exhausted`: run reached its deterministic limit.
+## Current implementation boundaries
 
-A recurring goal returns to `active` with a new `next_run_at` only after its run has been safely finalized. A one-time goal becomes completed.
+- Fixed-interval recurrence is implemented; cron expressions, weekdays, calendars, and timezone-aware recurrence rules are not yet implemented.
+- Event types and payloads are validated by TriggerRegistry, but a durable external event ingestion/dispatch path is not yet implemented.
+- The engine can record `awaiting_approval`, but resuming an autonomous goal through a verified Phase 5 approval is still an integration task.
+- Default execution is reasoning-only. It does not browse, send email, edit calendars, or run arbitrary tools.
+- Retry/idempotency policies are represented in the policy and design, but automatic retry of failed goal runs is not enabled.
+- Scheduler cadence is provided by the Phase 8 worker process, not by a built-in timer service.
 
-## Security and reliability rules
+## Test suite
 
-- Tenant ID comes only from verified `current_identity()`.
-- SQLite operations use transactions and atomic due-goal claims to reduce duplicate execution.
-- A run has a unique ID and idempotency key.
-- At-least-once scheduling is expected; external side effects must be protected by idempotency or approval.
-- The LLM cannot create arbitrary triggers, change budgets, or authorize actions.
-- Trusted events are allowlisted and size-limited.
-- User pause/cancel is checked before each execution boundary.
-- No credentials are included in prompts, goal text is treated as untrusted input, and tool authorization remains in Phase 5.
-- Scheduler polling is single-host in this phase. Cross-process distributed leases and production worker supervision are Phase 8.
+`tests/phase7/test_autonomy.py` covers tenant isolation, manual execution, recurring rescheduling, pause/cancel, policy validation, and allowlisted event validation.
 
-## Implementation sequence
+Run all tests from the project root:
 
-1. Define models, status transitions, validation, and deterministic policy.
-2. Implement tenant-scoped SQLite repository and run history.
-3. Implement GoalService and trigger registry.
-4. Implement engine with claim/complete/fail/approval/pause/cancel paths.
-5. Implement one-shot scheduler and runtime composition.
-6. Add tests for lifecycle, tenant isolation, recurrence, concurrent claims, budgets, retries/idempotency, event validation, and approval pause.
-7. Update README and PROJECT_PROGRESS.
+```powershell
+.\\venv\\Scripts\\python.exe -m unittest discover -s tests -v
+```
 
-## Test plan
+## Acceptance checklist
 
-- Invalid goal/schedule/recurrence/budget rejected.
-- User A cannot list/get/pause/cancel User B goals or runs.
-- A due goal is claimed once under concurrent scheduler calls.
-- One-time and recurring schedule transitions are correct.
-- Paused/cancelled goals never execute.
-- Budget exhaustion stops execution.
-- Retry only occurs for explicitly idempotent operations.
-- Approval result pauses and does not silently resume.
-- Unknown event types and oversized payloads are rejected.
-- Run outcomes and errors are persisted without secrets.
-- Existing Phase 1–6 regression suite remains intact.
-
-## Acceptance criteria
-
-- [ ] Goals and run history persist across process restarts.
-- [ ] All goal/run operations are tenant-scoped from authenticated identity.
-- [ ] Manual, scheduled, and allowlisted event triggers work.
-- [ ] Scheduler safely claims due goals.
-- [ ] Engine has bounded execution and safe retry rules.
-- [ ] Human approval pauses autonomy.
-- [ ] User pause/resume/cancel controls work.
-- [ ] Tests and full regression suite pass.
-- [ ] Documentation and engineering review complete.
-- [ ] Phase 7 MCQ assessment complete.
-
-## Explicit Phase 7 non-goals
-
-- Public HTTP API and web dashboard.
-- Production worker deployment, multi-host distributed scheduling, and autoscaling.
-- Production secret vault and encryption-at-rest for all stores.
-- Kubernetes/cloud deployment automation.
-- Autonomous execution without explicit user permissions or risk approval.
+- [x] Tenant-scoped goal and run persistence.
+- [x] Manual and fixed-interval scheduled goals.
+- [x] Pause, resume, cancel, and run-now operations.
+- [x] Atomic due-goal claim.
+- [x] Deterministic execution limits and safe reasoning-only default executor.
+- [x] Run outcome and history persistence.
+- [x] Event type and payload validation.
+- [x] Phase 7 focused tests authored.
+- [ ] Local focused and full regression tests run by the user.
+- [ ] Durable event dispatch and verified approval-resume integration.
+- [ ] Engineering review and MCQ assessment.
