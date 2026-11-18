@@ -31,10 +31,14 @@ class FakeConnector:
 
     name = "demo"
 
+    def __init__(self):
+        self.calls = []
+
     def get_supported_actions(self):
         return ["read", "create", "send_email"]
 
     def execute(self, action, parameters, credentials=None):
+        self.calls.append((action, parameters))
         return {"action": action, "parameters": parameters}
 
 
@@ -578,6 +582,57 @@ class TestIntegrationExecution(unittest.TestCase):
 
         self.assertEqual(result["status"], "awaiting_approval")
 
+    def test_medium_risk_runs_with_explicit_automatic_permission(self):
+        self.permissions.grant_permission(
+            "user_a", "demo", ["create"]
+        )
+        self.permissions.grant_automatic_permission(
+            "user_a", "demo", "create"
+        )
+
+        result = self.execution.execute(
+            "user_a", "demo", "create", {"name": "draft"}
+        )
+
+        self.assertEqual(result["status"], "completed")
+
+    def test_low_risk_runs_without_approval(self):
+        self.permissions.grant_permission(
+            "user_a", "demo", ["read"]
+        )
+
+        result = self.execution.execute(
+            "user_a", "demo", "read", {}
+        )
+
+        self.assertEqual(result["status"], "completed")
+
+    def test_high_risk_executes_only_after_approval(self):
+        self.permissions.grant_permission(
+            "user_a", "demo", ["send_email"]
+        )
+
+        pending = self.execution.execute(
+            "user_a", "demo", "send_email", {"to": "person@example.com"}
+        )
+
+        self.assertEqual(pending["status"], "awaiting_approval")
+        self.assertEqual(self.registry.get("demo").calls, [])
+
+        approval_id = pending["approval"]["approval_id"]
+        self.approvals.approve("user_a", approval_id)
+
+        completed = self.execution.execute(
+            "user_a",
+            "demo",
+            "send_email",
+            {"to": "person@example.com"},
+            approval_id=approval_id
+        )
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(len(self.registry.get("demo").calls), 1)
+
     def test_user_permissions_are_isolated(self):
         self.permissions.grant_permission(
             "user_a", "demo", ["read"]
@@ -663,6 +718,7 @@ class TestWorkflowApproval(unittest.TestCase):
         )
 
         self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(self.workflow.execution_manager.integration_registry.get("demo").calls, [])
         records = self.audit.get_user_records("user_a")
         self.assertEqual(records[-1]["risk_level"], "medium")
 
