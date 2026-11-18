@@ -15,7 +15,9 @@
 
 ## Current official phase
 
-**Phase 5 — Real-World Workflow Execution**
+**Phase 6 — Multi-User Agent Infrastructure**
+
+Phase 6 implementation is on `phase6-multi-user`; its tests and final review are pending. Phase 5 hardening remains the parent baseline.
 
 The Phase 5 hardening branch fixes runtime construction, opt-in browser setup, API redirect/path restrictions, OAuth state expiry, approval expiry, authenticated application-level integration binding, Gmail input validation, and workflow rejection audit risk. It adds `IntegrationWorkflowAgent`, which validates LLM-generated integration plans against registered actions and sends them through the approval-aware workflow manager. A focused Phase 5 regression test module covers these paths.
 
