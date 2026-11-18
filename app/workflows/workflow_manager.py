@@ -28,6 +28,12 @@ class WorkflowManager:
             if not required.issubset(step):
                 raise ValueError("Workflow step is incomplete.")
 
+            if not isinstance(step["integration"], str) or not step["integration"].strip():
+                raise ValueError("Invalid workflow integration.")
+
+            if not isinstance(step["action"], str) or not step["action"].strip():
+                raise ValueError("Invalid workflow action.")
+
             if not isinstance(step["parameters"], dict):
                 raise ValueError("Invalid workflow parameters.")
 
@@ -54,11 +60,12 @@ class WorkflowManager:
             step = deepcopy(
                 workflow["steps"][workflow["current_step"]]
             )
+            user_id = workflow["user_id"]
 
         try:
 
             result = self.execution_manager.execute(
-                user_id=workflow["user_id"],
+                user_id=user_id,
                 integration=step["integration"],
                 action=step["action"],
                 parameters=step["parameters"],
@@ -71,9 +78,7 @@ class WorkflowManager:
                 workflow["status"] = "failed"
                 workflow["error"] = type(error).__name__
 
-            return self.get_workflow(
-                workflow["user_id"], workflow_id
-            )
+            return self.get_workflow(user_id, workflow_id)
 
         with self.lock:
 
@@ -134,7 +139,7 @@ class WorkflowManager:
                 raise PermissionError("Workflow belongs to another user.")
 
             return deepcopy(workflow)
-        
+
     def reject(self, user_id, workflow_id, approval_id):
 
         with self.lock:
@@ -155,6 +160,14 @@ class WorkflowManager:
             if not pending or pending["approval_id"] != approval_id:
                 raise ValueError("Approval does not match this workflow.")
 
+            action_data = pending["action_data"]
+
+            risk_level = self.execution_manager.risk_evaluator.classify(
+                action_data["integration"],
+                action_data["action"],
+                action_data["parameters"]
+            )
+
             self.execution_manager.approval_manager.reject(
                 user_id, approval_id
             )
@@ -164,17 +177,11 @@ class WorkflowManager:
 
             self.execution_manager.audit_logger.log(
                 user_id,
-                pending["action_data"]["integration"],
-                pending["action_data"]["action"],
+                action_data["integration"],
+                action_data["action"],
                 "rejected",
-                "high",
+                risk_level,
                 "rejected"
-            )
-            
-            self.execution_manager.risk_evaluator.classify(
-                pending["action_data"]["integration"],
-                pending["action_data"]["action"],
-                pending["action_data"]["parameters"]
             )
 
             return deepcopy(workflow)
