@@ -6,6 +6,18 @@ from app.security.credential_manager import CredentialManager
 from app.security.permission_manager import PermissionManager
 from app.access.authorization_service import AuthorizationService
 from app.memory.authenticated_memory import AuthenticatedMemoryService
+from app.autonomy.goal_repository import GoalRepository
+from app.autonomy.goal_service import GoalService
+from app.autonomy.policy import AutonomyPolicy
+from app.autonomy.triggers import TriggerRegistry
+from app.autonomy.engine import AutonomyEngine
+from app.autonomy.scheduler import AutonomyScheduler
+
+
+def _executor_not_configured(description, limits):
+    raise RuntimeError(
+        "No autonomy executor was configured. Inject a trusted application executor."
+    )
 
 
 class MultiUserRuntime:
@@ -15,6 +27,8 @@ class MultiUserRuntime:
         token_secret=None,
         token_lifetime_seconds=3600,
         memory_database=None,
+        autonomy_database="data/paai_autonomy.db",
+        autonomy_executor=None,
     ):
         self.auth_repository = AuthRepository(auth_database)
         self.token_service = TokenService(token_secret, token_lifetime_seconds)
@@ -25,6 +39,18 @@ class MultiUserRuntime:
         )
         self.credentials = CredentialManager()
         self.permissions = PermissionManager()
+        self.autonomy_policy = AutonomyPolicy()
+        self.goal_repository = GoalRepository(autonomy_database)
+        self.goals = GoalService(self.goal_repository, self.autonomy_policy)
+        self.triggers = TriggerRegistry(
+            max_payload_bytes=self.autonomy_policy.max_event_payload_bytes
+        )
+        self.autonomy_engine = AutonomyEngine(
+            self.goal_repository,
+            autonomy_executor or _executor_not_configured,
+            self.autonomy_policy,
+        )
+        self.scheduler = AutonomyScheduler(self.autonomy_engine)
 
     def authenticate(self, token):
         return self.auth.authenticate(token)
