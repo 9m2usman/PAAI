@@ -23,7 +23,7 @@ class IntegrationWorkflowAgent:
         "browser": {
             "open_page": "Required parameter: url (HTTPS URL on an explicitly allowlisted domain).",
             "extract_text": "No parameters. Reads text from the current allowlisted page.",
-            "click": "Required parameter: selector (string).",
+            "click": "Required parameter: selector (string). Clicking always requires human approval because it may submit or trigger an external action.",
             "fill": "Required parameters: selector and value (strings)."
         }
     }
