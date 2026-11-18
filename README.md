@@ -77,3 +77,12 @@ See [PHASE_5.md](PHASE_5.md) for workflow usage, OAuth boundaries, tests, and cu
 ## Security warning
 
 This is a learning/prototype codebase, not a production deployment. Phase 5 stores OAuth credentials, workflow state, approvals, and audit events in memory. Credentials are not encrypted at rest. Authentication, durable tenant isolation, persistent encrypted secrets, a callback web server, and production deployment are future engineering work. Never commit `.env`, API keys, OAuth client secrets, access tokens, or refresh tokens.
+
+
+## Phase 6 — Multi-user foundation
+
+Phase 6 adds email/password registration, PBKDF2 password hashing, signed expiring HS256 access tokens, a SQLite authentication repository, verified request identity contexts, tenant guards, identity-bound authorization, authenticated profile storage, and thread-safe user-scoped credential and permission managers.
+
+Configure `PAAI_AUTH_SECRET` in your local `.env` with a random value of at least 32 characters. Never commit the secret. See [PHASE_6.md](PHASE_6.md) for the architecture, usage, security boundaries, and current limitations.
+
+The current implementation is framework-independent. An HTTP authentication middleware and production deployment are later roadmap work. Credential and permission stores are still in-memory, and the existing low-level Phase 3 memory functions must only be called by trusted application code using the verified identity.
