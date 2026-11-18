@@ -17,4 +17,4 @@ class MultiUserRuntime:
     def authenticate(self, token):
         return self.auth.authenticate(token)
     def authorization(self):
-        return AuthorizationService(self.permissions)
+        return AuthorizationService(self.permissions, self.credentials)
