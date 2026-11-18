@@ -749,7 +749,7 @@ class TestWorkflowApproval(unittest.TestCase):
 class TestPhase5RuntimeFactory(unittest.TestCase):
 
     def test_runtime_factory_registers_supported_connectors(self):
-        runtime = create_phase5_runtime()
+        runtime = create_phase5_runtime(google_oauth_config={})
 
         self.assertEqual(
             set(runtime["integration_registry"].list_integrations()),
@@ -763,7 +763,7 @@ class TestPhase5RuntimeFactory(unittest.TestCase):
 
     def test_browser_requires_explicit_allowlist(self):
         with self.assertRaisesRegex(ValueError, "allowlisted domains"):
-            create_phase5_runtime(enable_browser=True)
+            create_phase5_runtime(google_oauth_config={}, enable_browser=True)
 
 
 class TestIntegrationWorkflowAgent(unittest.TestCase):
