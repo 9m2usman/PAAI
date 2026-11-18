@@ -215,6 +215,13 @@ class TestBrowserDomainSecurity(unittest.TestCase):
                 {"url": "http://example.com"}
             )
 
+    def test_nonstandard_https_port_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.connector.execute(
+                "open_page",
+                {"url": "https://example.com:8443"}
+            )
+
     def test_redirect_to_untrusted_domain_is_rejected(self):
         self.driver.redirect_to = "https://attacker.invalid"
         with self.assertRaises(PermissionError):
@@ -249,6 +256,10 @@ class TestAPIConnectorValidation(unittest.TestCase):
     def test_path_traversal_is_rejected(self):
         with self.assertRaises(ValueError):
             self.api._build_target("../admin", {})
+
+    def test_double_encoded_path_traversal_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.api._build_target("%252e%252e%252fadmin", {})
 
     def test_non_https_base_url_is_rejected(self):
         with self.assertRaises(ValueError):
