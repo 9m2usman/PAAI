@@ -26,6 +26,12 @@ def get_settings():
     data_dir = Path(os.getenv("PAAI_DATA_DIR", "data"))
     data_dir.mkdir(parents=True, exist_ok=True)
     origins = [item.strip() for item in os.getenv("PAAI_CORS_ORIGINS", "").split(",") if item.strip()]
+    if "*" in origins:
+        raise ValueError("Wildcard CORS origins are not allowed with credentialed requests.")
+    if int(os.getenv("PAAI_MAX_REQUEST_BYTES", "1048576")) < 1024:
+        raise ValueError("PAAI_MAX_REQUEST_BYTES must be at least 1024.")
+    if int(os.getenv("PAAI_REQUESTS_PER_MINUTE", "120")) < 1:
+        raise ValueError("PAAI_REQUESTS_PER_MINUTE must be positive.")
     return Settings(
         auth_secret=secret,
         auth_database=os.getenv("PAAI_AUTH_DATABASE", str(data_dir / "paai_auth.db")),
