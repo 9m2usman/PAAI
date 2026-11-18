@@ -30,13 +30,14 @@ class FakeBrowserDriver:
 
     def __init__(self, final_url="https://example.com/home"):
         self.url = final_url
+        self.redirect_to = None
         self.allowed_domains = set()
 
     def set_allowed_domains(self, domains):
         self.allowed_domains = set(domains)
 
     def open_page(self, url):
-        self.url = url
+        self.url = self.redirect_to or url
         return {"url": self.url, "status": 200, "title": "Example"}
 
     def current_url(self):
@@ -189,7 +190,7 @@ class TestBrowserDomainSecurity(unittest.TestCase):
             )
 
     def test_redirect_to_untrusted_domain_is_rejected(self):
-        self.driver.url = "https://attacker.invalid"
+        self.driver.redirect_to = "https://attacker.invalid"
         with self.assertRaises(PermissionError):
             self.connector.execute(
                 "open_page",
