@@ -1,9 +1,21 @@
 import json
-from urllib.parse import urljoin, urlsplit, urlencode
-from urllib.request import Request, urlopen
+from urllib.parse import urlencode, urlsplit, urlunsplit, unquote
+from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
 
 from app.integrations.base_connector import BaseConnector
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        raise HTTPError(
+            request.full_url,
+            code,
+            "Redirects are not allowed for authenticated API requests.",
+            headers,
+            file_pointer
+        )
 
 
 class APIConnector(BaseConnector):
@@ -15,17 +27,33 @@ class APIConnector(BaseConnector):
         "delete": "DELETE"
     }
 
+    RESTRICTED_HEADERS = {
+        "authorization",
+        "proxy-authorization",
+        "host",
+        "cookie",
+        "content-length",
+        "connection"
+    }
+
     def __init__(self, name, base_url, timeout=15):
 
         super().__init__(name)
 
         parsed = urlsplit(base_url)
 
-        if parsed.scheme != "https" or not parsed.netloc:
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
             raise ValueError("API must use a valid HTTPS base URL.")
 
-        if parsed.username or parsed.password:
-            raise ValueError("Credentials must not be included in the URL.")
+        if not isinstance(timeout, (int, float)) or timeout <= 0:
+            raise ValueError("A positive API timeout is required.")
 
         self.base_url = base_url.rstrip("/") + "/"
         self.timeout = timeout
@@ -33,6 +61,47 @@ class APIConnector(BaseConnector):
 
     def get_supported_actions(self):
         return list(self.ACTION_METHODS.keys())
+
+    def _build_target(self, path, query):
+
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("API path is required.")
+
+        supplied_path = urlsplit(path)
+
+        if (
+            supplied_path.scheme
+            or supplied_path.netloc
+            or supplied_path.query
+            or supplied_path.fragment
+            or path.startswith("//")
+        ):
+            raise ValueError("API path must be a relative path only.")
+
+        decoded_path = unquote(supplied_path.path)
+
+        if any(part == ".." for part in decoded_path.split("/")):
+            raise ValueError("API path traversal is not allowed.")
+
+        target = self.base_url + supplied_path.path.lstrip("/")
+        parsed = urlsplit(target)
+
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc.lower() != self.allowed_host
+        ):
+            raise ValueError("API destination is not allowed.")
+
+        if not isinstance(query, dict):
+            raise ValueError("Query parameters must be a dictionary.")
+
+        return urlunsplit((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query, doseq=True),
+            ""
+        ))
 
     def execute(self, action, parameters, credentials=None):
 
@@ -42,32 +111,10 @@ class APIConnector(BaseConnector):
         if not isinstance(parameters, dict):
             raise ValueError("Parameters must be a dictionary.")
 
-        path = parameters.get("path")
-
-        if not isinstance(path, str) or not path.strip():
-            raise ValueError("API path is required.")
-
-        if path.startswith("//"):
-            raise ValueError("Invalid API path.")
-
-        target = urljoin(self.base_url, path.lstrip("/"))
-        parsed = urlsplit(target)
-
-        if (
-            parsed.scheme != "https"
-            or parsed.netloc.lower() != self.allowed_host
-            or any(part == ".." for part in parsed.path.split("/"))
-        ):
-            raise ValueError("API destination is not allowed.")
-
-        query = parameters.get("query", {})
-
-        if not isinstance(query, dict):
-            raise ValueError("Query parameters must be a dictionary.")
-
-        if query:
-            separator = "&" if parsed.query else "?"
-            target += separator + urlencode(query, doseq=True)
+        target = self._build_target(
+            parameters.get("path"),
+            parameters.get("query", {})
+        )
 
         headers = parameters.get("headers", {})
 
@@ -81,17 +128,15 @@ class APIConnector(BaseConnector):
             if not isinstance(key, str) or not isinstance(value, str):
                 raise ValueError("Invalid API header.")
 
-            if key.lower() in {
-                "authorization",
-                "host",
-                "cookie",
-                "content-length"
-            }:
+            if key.lower() in self.RESTRICTED_HEADERS:
                 raise ValueError("Restricted API header.")
 
             safe_headers[key] = value
 
-        if credentials:
+        if credentials is not None:
+
+            if not isinstance(credentials, dict):
+                raise ValueError("Invalid API credentials.")
 
             token = credentials.get("access_token")
 
@@ -102,25 +147,25 @@ class APIConnector(BaseConnector):
         encoded_body = None
 
         if body is not None:
-
             encoded_body = json.dumps(body).encode("utf-8")
             safe_headers["Content-Type"] = "application/json"
-
-        method = self.ACTION_METHODS[action]
 
         request = Request(
             target,
             data=encoded_body,
             headers=safe_headers,
-            method=method
+            method=self.ACTION_METHODS[action]
         )
+
+        opener = build_opener(_NoRedirectHandler)
 
         try:
 
-            with urlopen(request, timeout=self.timeout) as response:
+            with opener.open(request, timeout=self.timeout) as response:
 
                 response_text = response.read().decode(
-                    "utf-8", errors="replace"
+                    "utf-8",
+                    errors="replace"
                 )
 
                 try:
@@ -136,7 +181,8 @@ class APIConnector(BaseConnector):
         except HTTPError as error:
 
             raise RuntimeError(
-                f"External API returned HTTP {error.code}."
+                f"External API request failed with HTTP {error.code}. "
+                "Redirects are not followed."
             ) from None
 
         except (URLError, TimeoutError):
