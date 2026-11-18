@@ -848,19 +848,28 @@ class TestAIWorkflowEndToEnd(unittest.TestCase):
 
     def setUp(self):
         self.registry = IntegrationRegistry()
-        self.connector = FakeConnector()
-        self.registry.register(self.connector)
+        self.gmail = GmailConnector()
+        self.registry.register(self.gmail)
 
         self.permissions = PermissionManager()
         self.permissions.grant_permission(
-            "verified_user", "demo", ["create", "send_email", "read"]
+            "verified_user",
+            "gmail",
+            ["create_draft", "send_email"]
+        )
+
+        self.credentials = CredentialManager()
+        self.credentials.store_credentials(
+            "verified_user",
+            "gmail",
+            {"access_token": "mock-access-token", "expires_at": 9999999999}
         )
 
         self.approvals = ApprovalManager()
         self.workflow_manager = WorkflowManager(
             ExecutionManager(
                 integration_registry=self.registry,
-                credential_manager=CredentialManager(),
+                credential_manager=self.credentials,
                 permission_manager=self.permissions,
                 approval_manager=self.approvals,
                 risk_evaluator=RiskEvaluator(),
@@ -874,57 +883,70 @@ class TestAIWorkflowEndToEnd(unittest.TestCase):
         )
 
     @patch("app.agents.integration_workflow_agent.generate_response")
-    def test_ai_workflow_waits_for_approval_then_executes(self, mock_response):
+    def test_ai_workflow_waits_for_approval_then_creates_gmail_draft(
+        self,
+        mock_response
+    ):
         mock_response.return_value = (
             '{"goal":"Create a draft","steps":['
-            '{"integration":"demo","action":"create","parameters":{"name":"draft"}}]}'
+            '{"integration":"gmail","action":"create_draft","parameters":'
+            '{"to":"person@example.com","subject":"Hello","body":"Draft body"}}]}'
         )
 
-        pending = self.agent.run(
-            "verified_user",
-            "Create a draft."
-        )
+        with patch.object(
+            self.gmail.api,
+            "execute",
+            return_value={"id": "draft-1"}
+        ) as mock_api:
 
-        self.assertEqual(pending["status"], "awaiting_approval")
-        self.assertEqual(self.connector.calls, [])
+            pending = self.agent.run(
+                "verified_user",
+                "Prepare an email draft."
+            )
 
-        workflow_id = pending["workflow"]["workflow_id"]
-        approval_id = pending["workflow"]["pending_approval"]["approval_id"]
+            self.assertEqual(pending["status"], "awaiting_approval")
+            mock_api.assert_not_called()
 
-        self.approvals.approve("verified_user", approval_id)
+            workflow_id = pending["workflow"]["workflow_id"]
+            approval_id = pending["workflow"]["pending_approval"]["approval_id"]
 
-        completed = self.agent.resume(
-            "verified_user",
-            workflow_id,
-            approval_id
-        )
+            self.approvals.approve("verified_user", approval_id)
 
-        self.assertEqual(completed["status"], "completed")
-        self.assertEqual(len(self.connector.calls), 1)
+            completed = self.agent.resume(
+                "verified_user",
+                workflow_id,
+                approval_id
+            )
+
+            self.assertEqual(completed["status"], "completed")
+            mock_api.assert_called_once()
 
     @patch("app.agents.integration_workflow_agent.generate_response")
-    def test_rejected_ai_workflow_never_executes(self, mock_response):
+    def test_rejected_ai_email_never_reaches_gmail_api(self, mock_response):
         mock_response.return_value = (
             '{"goal":"Send email","steps":['
-            '{"integration":"demo","action":"send_email","parameters":{"to":"person@example.com"}}]}'
+            '{"integration":"gmail","action":"send_email","parameters":'
+            '{"to":"person@example.com","subject":"Hello","body":"Email body"}}]}'
         )
 
-        pending = self.agent.run(
-            "verified_user",
-            "Send an email."
-        )
+        with patch.object(self.gmail.api, "execute") as mock_api:
 
-        workflow_id = pending["workflow"]["workflow_id"]
-        approval_id = pending["workflow"]["pending_approval"]["approval_id"]
+            pending = self.agent.run(
+                "verified_user",
+                "Send an email."
+            )
 
-        rejected = self.agent.reject(
-            "verified_user",
-            workflow_id,
-            approval_id
-        )
+            workflow_id = pending["workflow"]["workflow_id"]
+            approval_id = pending["workflow"]["pending_approval"]["approval_id"]
 
-        self.assertEqual(rejected["status"], "rejected")
-        self.assertEqual(self.connector.calls, [])
+            rejected = self.agent.reject(
+                "verified_user",
+                workflow_id,
+                approval_id
+            )
+
+            self.assertEqual(rejected["status"], "rejected")
+            mock_api.assert_not_called()
 
 
 class TestIntegrationToolIdentity(unittest.TestCase):
