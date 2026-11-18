@@ -17,7 +17,8 @@ Allow the trusted application layer to run real integration actions through a co
 5. `ApprovalManager` binds an approval to the exact integration, action, and parameters. Approvals expire after 15 minutes by default and can be consumed once.
 6. `ExecutionManager` checks permission and risk, obtains credentials, invokes the connector, and writes an audit record.
 7. `WorkflowManager` runs ordered integration steps, pauses when approval is needed, and resumes or rejects the workflow.
-8. `IntegrationToolAdapter` is an application-facing adapter. The authenticated application must bind the user identity before calling it; never accept a user ID supplied by the LLM.
+8. `IntegrationWorkflowAgent` asks the LLM to produce an ordered integration plan, validates every integration/action against the registered connector catalog, and passes the steps to `WorkflowManager`. The authenticated user ID is injected by the trusted caller and is never requested from the model.
+9. `IntegrationToolAdapter` remains an application-facing adapter for trusted application code. Its `for_authenticated_user` method binds identity outside model-controlled arguments.
 
 ## Risk and approval rules
 
@@ -60,7 +61,7 @@ The existing document processor supports TXT, Markdown, JSON, and CSV reading, p
 
 ## Example: create a runtime and run a workflow
 
-The following is an application-layer example. In a real web application, obtain `authenticated_user_id` from the verified login session, never from a prompt or model-generated argument.
+The following is an application-layer example. In a real web application, obtain `authenticated_user_id` from the verified login session, never from a prompt or model-generated argument. The workflow agent receives the natural-language request, builds a plan using only registered connector actions, validates it, and sends it through the approval-aware workflow manager.
 
 ```python
 from app.integrations.register_integrations import create_phase5_runtime, close_phase5_runtime
@@ -75,25 +76,33 @@ runtime["permission_manager"].grant_permission(
     ["list_emails", "read_email", "create_draft", "send_email"]
 )
 
-result = runtime["workflow_manager"].run(
+result = runtime["workflow_agent"].run(
     user_id,
-    [
-        {
-            "integration": "gmail",
-            "action": "list_emails",
-            "parameters": {"max_results": 5}
-        }
-    ]
+    "Find my latest five emails."
 )
 
 print(result)
+
+if result["status"] == "awaiting_approval":
+    workflow_id = result["workflow"]["workflow_id"]
+    approval_id = result["workflow"]["pending_approval"]["approval_id"]
+
+    runtime["approval_manager"].approve(user_id, approval_id)
+
+    result = runtime["workflow_agent"].resume(
+        user_id,
+        workflow_id,
+        approval_id
+    )
+
+    print(result)
 
 close_phase5_runtime(runtime)
 ```
 
 For a high-risk step, the workflow returns with `status == "awaiting_approval"`. Approve it through `runtime["approval_manager"].approve(user_id, approval_id)`, then call `runtime["workflow_manager"].resume(user_id, workflow_id, approval_id)`. To reject, call `runtime["workflow_manager"].reject(user_id, workflow_id, approval_id)`.
 
-The example requires the user's Google account to have been connected through OAuth first. The in-memory runtime and credentials must remain alive for the duration of the workflow.
+The example requires the user's Google account to have been connected through OAuth first and the user to have permission for the requested action. The in-memory runtime and credentials must remain alive for the duration of the workflow. The model never receives credentials or a user ID.
 
 ## Local verification
 
@@ -113,7 +122,7 @@ The tests mock external services. They must not send real emails, change a real 
 - Credentials are not encrypted at rest. Do not use this prototype as a production credential vault.
 - OAuth state is in memory; multiple server processes need shared state storage.
 - The application must implement authentication and the OAuth callback. Phase 6 will establish trusted identity and tenant isolation at the platform boundary.
-- The current workflow manager is called by trusted application code. The Phase 2 planner's generic tool schema does not yet carry integration parameters or a verified user context, so do not expose the adapter as a global LLM tool. A future planner/orchestrator bridge must inject authenticated identity outside model-controlled arguments and route approvals back to the user.
+- The new `IntegrationWorkflowAgent` is the safe LLM-to-workflow bridge for Phase 5. It is deliberately separate from the generic Phase 2 tool registry: it accepts only catalogued connector actions, validates the model's proposed plan, and injects identity from the trusted caller. Do not expose the raw integration adapter or user ID as model-controlled tool arguments.
 - Browser automation uses one browser context per runtime, not a durable per-user browser profile. Do not share a runtime's browser session between users.
 - API requests reject redirects. If a provider legitimately requires a redirect, handle it with an explicit provider-specific allowlist rather than enabling unrestricted redirects.
 - Gmail and Calendar live API calls, Google OAuth, and real browser navigation require manual integration testing with test accounts and allowlisted domains.
@@ -128,6 +137,7 @@ The tests mock external services. They must not send real emails, change a real 
 - [x] OAuth state is user-bound and expires.
 - [x] Browser and API destination restrictions are implemented.
 - [x] Workflow rejection records the actual risk level.
+- [x] Authenticated AI workflow planner validates model-generated integration plans.
 - [x] Focused Phase 5 regression tests are added.
 - [ ] Run focused and full test suites on Windows.
 - [ ] Complete a mocked end-to-end email draft/approval workflow test.
