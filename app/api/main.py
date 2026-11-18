@@ -35,6 +35,7 @@ def create_app(runtime=None, settings=None):
         lifespan=lifespan,
         docs_url="/docs" if settings.docs_enabled else None,
         redoc_url=None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
     app.add_middleware(RequestControls, max_body_bytes=settings.max_request_bytes, requests_per_minute=settings.requests_per_minute)
     if settings.cors_origins:
