@@ -13,6 +13,7 @@ from app.security.credential_manager import CredentialManager
 from app.security.permission_manager import PermissionManager
 from app.tools.integration_tool import IntegrationToolAdapter
 from app.workflows.workflow_manager import WorkflowManager
+from app.agents.integration_workflow_agent import IntegrationWorkflowAgent
 from app.integrations.register_integrations import (
     create_phase5_runtime,
     close_phase5_runtime
@@ -28,6 +29,27 @@ class FakeConnector:
 
     def execute(self, action, parameters, credentials=None):
         return {"action": action, "parameters": parameters}
+
+
+class FakeWorkflowManager:
+
+    def __init__(self, result=None):
+        self.result = result or {"status": "completed"}
+        self.run_arguments = None
+        self.resume_arguments = None
+        self.reject_arguments = None
+
+    def run(self, user_id, steps):
+        self.run_arguments = (user_id, steps)
+        return self.result
+
+    def resume(self, user_id, workflow_id, approval_id):
+        self.resume_arguments = (user_id, workflow_id, approval_id)
+        return {"status": "completed"}
+
+    def reject(self, user_id, workflow_id, approval_id):
+        self.reject_arguments = (user_id, workflow_id, approval_id)
+        return {"status": "rejected"}
 
 
 class FakeBrowserDriver:
@@ -405,6 +427,7 @@ class TestPhase5RuntimeFactory(unittest.TestCase):
             {"gmail", "calendar"}
         )
         self.assertIsInstance(runtime["workflow_manager"], WorkflowManager)
+        self.assertIsInstance(runtime["workflow_agent"], IntegrationWorkflowAgent)
         self.assertIsNone(runtime["browser_driver"])
 
         close_phase5_runtime(runtime)
@@ -412,6 +435,84 @@ class TestPhase5RuntimeFactory(unittest.TestCase):
     def test_browser_requires_explicit_allowlist(self):
         with self.assertRaisesRegex(ValueError, "allowlisted domains"):
             create_phase5_runtime(enable_browser=True)
+
+
+class TestIntegrationWorkflowAgent(unittest.TestCase):
+
+    def setUp(self):
+        self.registry = IntegrationRegistry()
+        self.registry.register(FakeConnector())
+        self.manager = FakeWorkflowManager()
+        self.agent = IntegrationWorkflowAgent(
+            self.manager,
+            self.registry
+        )
+
+    @patch("app.agents.integration_workflow_agent.generate_response")
+    def test_agent_validates_plan_and_uses_authenticated_identity(self, mock_response):
+        mock_response.return_value = (
+            '{"goal":"Read data","steps":['
+            '{"integration":"demo","action":"read","parameters":{"query":"latest"}}]}'
+        )
+
+        result = self.agent.run(
+            "verified_user",
+            "Read the latest data."
+        )
+
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(self.manager.run_arguments[0], "verified_user")
+        self.assertEqual(
+            self.manager.run_arguments[1][0]["parameters"]["query"],
+            "latest"
+        )
+
+        prompt = mock_response.call_args[0][0]
+        self.assertNotIn("verified_user", str(prompt))
+
+    @patch("app.agents.integration_workflow_agent.generate_response")
+    def test_model_cannot_inject_user_identity(self, mock_response):
+        mock_response.return_value = (
+            '{"goal":"Read data","user_id":"attacker","steps":[]}'
+        )
+
+        with self.assertRaisesRegex(ValueError, "unexpected fields"):
+            self.agent.run("verified_user", "Read data.")
+
+    @patch("app.agents.integration_workflow_agent.generate_response")
+    def test_unsupported_action_is_rejected(self, mock_response):
+        mock_response.return_value = (
+            '{"goal":"Do something","steps":['
+            '{"integration":"demo","action":"transfer_money","parameters":{}}]}'
+        )
+
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            self.agent.run("verified_user", "Transfer money.")
+
+    @patch("app.agents.integration_workflow_agent.generate_response")
+    def test_empty_plan_does_not_start_workflow(self, mock_response):
+        mock_response.return_value = '{"goal":"No integration needed","steps":[]}'
+
+        result = self.agent.run(
+            "verified_user",
+            "Explain what an email is."
+        )
+
+        self.assertEqual(result["status"], "no_actions")
+        self.assertIsNone(self.manager.run_arguments)
+
+    def test_resume_and_reject_keep_authenticated_identity(self):
+        self.agent.resume("verified_user", "workflow-1", "approval-1")
+        self.agent.reject("verified_user", "workflow-2", "approval-2")
+
+        self.assertEqual(
+            self.manager.resume_arguments,
+            ("verified_user", "workflow-1", "approval-1")
+        )
+        self.assertEqual(
+            self.manager.reject_arguments,
+            ("verified_user", "workflow-2", "approval-2")
+        )
 
 
 class TestIntegrationToolIdentity(unittest.TestCase):
