@@ -184,3 +184,15 @@ class GoogleOAuthManager:
         )
 
         return credentials
+
+    def create_authorization_url_for_current_identity(self):
+        from app.identity.context import current_identity
+        return self.create_authorization_url(current_identity().user_id)
+
+    def exchange_code_for_current_identity(self, code, state):
+        from app.identity.context import current_identity
+        return self.exchange_code(current_identity().user_id, code, state)
+
+    def get_valid_credentials_for_current_identity(self, integration):
+        from app.identity.context import current_identity
+        return self.get_valid_credentials(current_identity().user_id, integration)
