@@ -844,6 +844,89 @@ class TestIntegrationWorkflowAgent(unittest.TestCase):
         )
 
 
+class TestAIWorkflowEndToEnd(unittest.TestCase):
+
+    def setUp(self):
+        self.registry = IntegrationRegistry()
+        self.connector = FakeConnector()
+        self.registry.register(self.connector)
+
+        self.permissions = PermissionManager()
+        self.permissions.grant_permission(
+            "verified_user", "demo", ["create", "send_email", "read"]
+        )
+
+        self.approvals = ApprovalManager()
+        self.workflow_manager = WorkflowManager(
+            ExecutionManager(
+                integration_registry=self.registry,
+                credential_manager=CredentialManager(),
+                permission_manager=self.permissions,
+                approval_manager=self.approvals,
+                risk_evaluator=RiskEvaluator(),
+                audit_logger=AuditLogger()
+            )
+        )
+
+        self.agent = IntegrationWorkflowAgent(
+            self.workflow_manager,
+            self.registry
+        )
+
+    @patch("app.agents.integration_workflow_agent.generate_response")
+    def test_ai_workflow_waits_for_approval_then_executes(self, mock_response):
+        mock_response.return_value = (
+            '{"goal":"Create a draft","steps":['
+            '{"integration":"demo","action":"create","parameters":{"name":"draft"}}]}'
+        )
+
+        pending = self.agent.run(
+            "verified_user",
+            "Create a draft."
+        )
+
+        self.assertEqual(pending["status"], "awaiting_approval")
+        self.assertEqual(self.connector.calls, [])
+
+        workflow_id = pending["workflow"]["workflow_id"]
+        approval_id = pending["workflow"]["pending_approval"]["approval_id"]
+
+        self.approvals.approve("verified_user", approval_id)
+
+        completed = self.agent.resume(
+            "verified_user",
+            workflow_id,
+            approval_id
+        )
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(len(self.connector.calls), 1)
+
+    @patch("app.agents.integration_workflow_agent.generate_response")
+    def test_rejected_ai_workflow_never_executes(self, mock_response):
+        mock_response.return_value = (
+            '{"goal":"Send email","steps":['
+            '{"integration":"demo","action":"send_email","parameters":{"to":"person@example.com"}}]}'
+        )
+
+        pending = self.agent.run(
+            "verified_user",
+            "Send an email."
+        )
+
+        workflow_id = pending["workflow"]["workflow_id"]
+        approval_id = pending["workflow"]["pending_approval"]["approval_id"]
+
+        rejected = self.agent.reject(
+            "verified_user",
+            workflow_id,
+            approval_id
+        )
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(self.connector.calls, [])
+
+
 class TestIntegrationToolIdentity(unittest.TestCase):
 
     def test_user_bound_adapter_does_not_accept_llm_identity(self):
