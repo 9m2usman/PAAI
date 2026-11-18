@@ -63,6 +63,14 @@ class AuthRepository:
             ).fetchone()
         return dict(row) if row else None
 
+    def list_principals(self):
+        from app.identity.principal import Principal
+        with self.lock, self.connect() as db:
+            rows = db.execute(
+                "SELECT user_id,email FROM auth_users ORDER BY created_at"
+            ).fetchall()
+        return [Principal(row["user_id"], row["email"]) for row in rows]
+
     def close(self):
         if self._keeper is not None:
             self._keeper.close()
