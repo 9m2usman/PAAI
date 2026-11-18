@@ -9,7 +9,7 @@
 | 3 | Memory and personalization | Officially closed; 24 tests reported passing; phase documentation updated |
 | 4 | Multi-agent orchestration | Implementation and tests reported passing; final engineering review/assessment was not explicitly confirmed |
 | 5 | Real-world workflow execution | Hardening implementation complete; focused Phase 5 tests and full project suite reported passing on `phase5-hardening`; documentation/engineering review and formal phase closure pending |
-| 6 | Multi-user agent infrastructure | Not started |
+| 6 | Multi-user agent infrastructure | Implementation committed on `phase6-multi-user`; tests and review pending |
 | 7 | Advanced autonomy | Not started |
 | 8 | Production engineering | Not started |
 
@@ -55,3 +55,12 @@ See `PHASE_5.md` for the detailed architecture, commands, and acceptance checkli
 - Current hardening branch: `phase5-hardening`
 - The existing `main` branch has not been changed by this hardening pass.
 - No merge into `main` has been performed.
+
+
+## Current official phase
+
+**Phase 6 — Multi-User Agent Infrastructure**
+
+The Phase 6 implementation branch adds email/password authentication, PBKDF2 password hashing, signed expiring HS256 tokens, SQLite account storage, trusted identity contexts, tenant ownership checks, identity-bound authorization, isolated profile storage, and thread-safe per-user credential and permission managers. Phase 6 test modules cover authentication, identity, tenant isolation, authorization, profile isolation, tool isolation, concurrency, and an end-to-end two-user flow.
+
+Implementation is present on `phase6-multi-user`. The full test suite has not yet been run by the user, so Phase 6 is not closed. See `PHASE_6.md` for the implementation boundaries and remaining limitations.
