@@ -13,6 +13,10 @@ from app.security.credential_manager import CredentialManager
 from app.security.permission_manager import PermissionManager
 from app.tools.integration_tool import IntegrationToolAdapter
 from app.workflows.workflow_manager import WorkflowManager
+from app.integrations.register_integrations import (
+    create_phase5_runtime,
+    close_phase5_runtime
+)
 
 
 class FakeConnector:
@@ -389,6 +393,25 @@ class TestWorkflowApproval(unittest.TestCase):
 
         with self.assertRaises(PermissionError):
             self.workflow.get_workflow("user_b", paused["workflow_id"])
+
+
+class TestPhase5RuntimeFactory(unittest.TestCase):
+
+    def test_runtime_factory_registers_supported_connectors(self):
+        runtime = create_phase5_runtime()
+
+        self.assertEqual(
+            set(runtime["integration_registry"].list_integrations()),
+            {"gmail", "calendar"}
+        )
+        self.assertIsInstance(runtime["workflow_manager"], WorkflowManager)
+        self.assertIsNone(runtime["browser_driver"])
+
+        close_phase5_runtime(runtime)
+
+    def test_browser_requires_explicit_allowlist(self):
+        with self.assertRaisesRegex(ValueError, "allowlisted domains"):
+            create_phase5_runtime(enable_browser=True)
 
 
 class TestIntegrationToolIdentity(unittest.TestCase):
