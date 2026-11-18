@@ -221,3 +221,15 @@ class IntegrationWorkflowAgent:
             "status": workflow["status"],
             "workflow": workflow
         }
+
+    def run_for_current_identity(self, user_request):
+        from app.identity.context import current_identity
+        return self.run(current_identity().user_id, user_request)
+
+    def resume_for_current_identity(self, workflow_id, approval_id):
+        from app.identity.context import current_identity
+        return self.resume(current_identity().user_id, workflow_id, approval_id)
+
+    def reject_for_current_identity(self, workflow_id, approval_id):
+        from app.identity.context import current_identity
+        return self.reject(current_identity().user_id, workflow_id, approval_id)
