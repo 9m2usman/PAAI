@@ -17,7 +17,7 @@
 
 **Phase 5 — Real-World Workflow Execution**
 
-The Phase 5 hardening branch fixes runtime construction, opt-in browser setup, API redirect/path restrictions, OAuth state expiry, approval expiry, authenticated application-level integration binding, Gmail input validation, and workflow rejection audit risk. It also adds a focused Phase 5 regression test module.
+The Phase 5 hardening branch fixes runtime construction, opt-in browser setup, API redirect/path restrictions, OAuth state expiry, approval expiry, authenticated application-level integration binding, Gmail input validation, and workflow rejection audit risk. It adds `IntegrationWorkflowAgent`, which validates LLM-generated integration plans against registered actions and sends them through the approval-aware workflow manager. A focused Phase 5 regression test module covers these paths.
 
 The code has been committed to the separate GitHub branch `phase5-hardening`. The changes have not yet been run in the local Windows virtual environment. Do not merge or declare Phase 5 complete until local tests and the remaining acceptance criteria in `PHASE_5.md` are completed.
 
