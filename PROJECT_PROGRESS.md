@@ -6,35 +6,54 @@
 |---|---|---|
 | 1 | Understanding AI agents | Combined Phase 1/2 assessment reported passed; final practical review not explicitly confirmed |
 | 2 | Building the first autonomous agent | Implementation and automated checks reported complete; live autonomous demonstration not explicitly confirmed |
-| 3 | Memory and personalization | Officially closed; 24 tests reported passing; phase documentation updated |
+| 3 | Memory and personalization | Officially closed; 24 tests reported passing; documentation updated |
 | 4 | Multi-agent orchestration | Implementation and tests reported passing; formal engineering assessment not explicitly confirmed |
-| 5 | Real-world workflow execution | Officially closed after hardening, regression tests, documentation review, and 9/10 MCQ assessment; live Google OAuth/Gmail/Calendar verification remains deferred |
-| 6 | Multi-user agent infrastructure | Implementation and memory-isolation remediation committed on `phase6-multi-user`; final full-suite rerun and MCQ assessment pending |
-| 7 | Advanced autonomy | Not started |
-| 8 | Production engineering | Not started |
+| 5 | Real-world workflow execution | Officially closed after hardening, regression tests, documentation review, and 9/10 MCQ assessment; live Google OAuth/Gmail/Calendar verification deferred |
+| 6 | Multi-user agent infrastructure | Implementation and authenticated-memory remediation committed on `phase6-multi-user`; user deferred final regression rerun and MCQ assessment |
+| 7 | Advanced autonomy | Initial implementation committed on `phase7-advanced-autonomy`; local tests and review pending |
+| 8 | Production engineering | Initial implementation committed on `phase8-production-engineering`; local tests and review pending |
 
-## Current official phase
+## Phase 7 — Advanced Autonomy
 
-**Phase 6 — Multi-User Agent Infrastructure**
+Branch: `phase7-advanced-autonomy`
 
-The Phase 6 branch is `phase6-multi-user`, based on the Phase 5 hardening branch. The implementation provides email/password authentication, PBKDF2 password hashing, signed expiring HS256 tokens, SQLite account storage, request-local identity contexts, tenant checks, authenticated profile and memory services, and thread-safe per-user credential and permission managers.
+Implemented:
+- Persistent tenant-scoped goals and run history in SQLite.
+- Manual, one-time scheduled, and fixed-interval recurring goals.
+- Goal listing, inspection, pause, resume, cancel, and run-now.
+- Atomic due-goal claiming and a one-tick scheduler.
+- Deterministic step/runtime/batch/payload limits.
+- Safe reasoning-only default executor; trusted custom executor injection.
+- Allowlisted event type and payload validation.
+- Focused Phase 7 test suite.
 
-The user reported that the complete suite previously passed 123 tests. During the engineering review, a coverage gap was found: the original test named `test_memory_isolation.py` tested profile isolation but did not exercise the Phase 3 memory store. An authenticated memory facade and real memory-isolation tests have now been added. The complete suite must be rerun after this remediation before Phase 6 can be closed.
+Remaining boundaries: local tests not run; durable event dispatch and approval-resume integration incomplete; fixed-interval scheduling only; runtime limit checked after executor returns; custom executor must enforce hard timeout and Phase 5 permissions.
 
-See [PHASE_6.md](PHASE_6.md) for architecture, usage, verification, review findings, and remaining limitations.
+## Phase 8 — Production Engineering
 
-## Phase 5 baseline
+Branch: `phase8-production-engineering`
 
-Phase 5 hardening is maintained on the separate `phase5-hardening` branch and is the parent baseline for Phase 6. It adds controlled real-world integrations, deterministic risk classification, approval-bound execution, OAuth state handling, browser/API destination restrictions, and a validated LLM-to-workflow bridge.
+Implemented:
+- FastAPI registration/login/me and authenticated goal create/list/get/pause/resume/cancel/run/history routes.
+- Bearer-token verification and request-local identity scope.
+- Health/readiness endpoints.
+- Environment configuration, request IDs, basic security headers, Content-Length limit, process-local per-IP rate limiting, explicit CORS validation.
+- Best-effort secret-redaction logging filter and Fernet encryption helper.
+- Background worker entry point that scopes each registered principal separately.
+- Dockerfile, Docker Compose API/worker services, GitHub Actions CI workflow, production runbook, API and crypto tests.
 
-The user reported that the focused Phase 5 tests and full project suite passed. The Phase 5 engineering review and 9/10 MCQ assessment were completed, and Phase 5 was officially closed. Manual Google OAuth and live Gmail/Calendar verification remain deferred.
+Remaining boundaries: tests/CI not run; Fernet helper is not wired into Phase 5's in-memory CredentialManager; approvals are not exposed through the HTTP API; default goal execution is reasoning-only; rate limiting is process-local; deployment is single-host SQLite and requires external TLS ingress, monitoring, backups, and secret management.
 
-See [PHASE_5.md](PHASE_5.md) for implementation details and the external-integration limitations.
+## Phase 6 pending user review
+
+The user deferred the complete Phase 6 test rerun and MCQ assessment. The authenticated memory facade and actual Phase 3 memory-isolation tests are committed on the Phase 6 branch. Do not mark Phase 6 formally closed until the user returns to tests and assessment.
 
 ## Repository workflow
 
 - Repository: https://github.com/9m2usman/PAAI
-- Phase 5 branch: `phase5-hardening`
-- Phase 6 branch: `phase6-multi-user`
-- Changes are kept on phase-specific branches; no merge into `main` has been performed.
-- Keep `.env`, `venv`, API keys, OAuth secrets, and access tokens out of Git.
+- Phase 5: `phase5-hardening`
+- Phase 6: `phase6-multi-user`
+- Phase 7: `phase7-advanced-autonomy`
+- Phase 8: `phase8-production-engineering`
+- No phase branch has been merged into `main`.
+- Keep `.env`, `venv`, API keys, OAuth secrets, access tokens, encryption keys, and database files out of Git.
