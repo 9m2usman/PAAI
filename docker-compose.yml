@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      PAAI_DATA_DIR: /srv/paai/data
+      PAAI_HOST: 0.0.0.0
+      PAAI_PORT: 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - paai-data:/srv/paai/data
+    restart: unless-stopped
+    init: true
+
+volumes:
+  paai-data:
