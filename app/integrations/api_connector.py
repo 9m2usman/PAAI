@@ -80,9 +80,15 @@ class APIConnector(BaseConnector):
         ):
             raise ValueError("API path must be a relative path only.")
 
-        decoded_path = unquote(supplied_path.path)
+        decoded_path = supplied_path.path
 
-        if any(part == ".." for part in decoded_path.split("/")):
+        for _ in range(3):
+            decoded_path = unquote(decoded_path)
+
+        if (
+            any(part == ".." for part in decoded_path.split("/"))
+            or "\\" in decoded_path
+        ):
             raise ValueError("API path traversal is not allowed.")
 
         target = self.base_url + supplied_path.path.lstrip("/")
