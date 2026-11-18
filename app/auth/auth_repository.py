@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import contextmanager
 import threading
 import uuid
 from pathlib import Path
@@ -18,11 +19,15 @@ class AuthRepository:
                 user_id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_hash TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
 
+    @contextmanager
     def connect(self):
         db = sqlite3.connect(self.database_path, timeout=15, uri=self.uri)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
-        return db
+        try:
+            yield db
+        finally:
+            db.close()
 
     def create_user(self, email, password_hash):
         user = {"user_id":str(uuid.uuid4()), "email":email.strip().lower()}
