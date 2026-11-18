@@ -1,51 +1,40 @@
-# Phase 8 — Production Engineering Blueprint
+# Phase 8 — Production Engineering
 
-## Purpose
+## Goal
 
-Turn the completed PAAI autonomy runtime into a deployable, observable, maintainable service with a secure HTTP boundary, durable operations, background workers, operational controls, and deployment automation.
+Provide a real application boundary around PAAI: authenticated HTTP endpoints, request controls, background worker entry point, deployment packaging, CI, and an operational runbook. This is a production-oriented foundation, not a claim that a live deployment is already secure or available.
 
-Phase 8 builds on the stable service interfaces delivered in Phase 7. It must not replace the agent, memory, orchestration, or autonomy layers with a second application architecture.
+## Architecture
 
-## Target architecture
+Client → HTTPS reverse proxy supplied by deployment host → FastAPI → bearer-token verification → request-local identity scope → existing authenticated services.
 
-Client → HTTPS reverse proxy → FastAPI application → authentication middleware → authenticated request context → application services → durable repositories.
+A separate worker process loads the same runtime and iterates trusted principals from the authentication repository. It establishes an identity scope for each tenant before running that tenant's due-goal scheduler tick.
 
-Background worker → persistent scheduler/goal queue → autonomy engine → existing agent/workflow runtime.
+## Implemented components
 
-Shared infrastructure:
-- SQLite for local development and single-instance deployment; repository interfaces must allow a future PostgreSQL adapter.
-- Encrypted credential storage using a dedicated encryption key from the environment/secret manager.
-- Structured logs, health/readiness endpoints, metrics, request IDs, and audit records.
-- Docker deployment for repeatable local/host deployment, with non-root runtime and health checks.
+### HTTP API
+- `app/api/main.py`: application factory and lifespan.
+- `app/api/dependencies.py`: bearer-token authentication and request-local identity scope.
+- `app/api/schemas.py`: bounded request/response models.
+- `app/api/routes/auth.py`: registration, login, current-user endpoint.
+- `app/api/routes/goals.py`: create/list/get/pause/resume/cancel/run-now and run history.
+- `app/api/routes/health.py`: liveness and readiness.
+- Every goal route calls tenant-scoped services. No route accepts a user ID as proof of identity.
 
-## Module plan
+### Operational controls
+- `app/production/settings.py`: environment-backed configuration and required authentication secret validation.
+- `app/production/middleware.py`: request IDs, response security headers, Content-Length request-size bound, and process-local per-IP rate limit.
+- `app/production/logging.py`: best-effort redaction filter for common token/password/secret patterns.
+- `app/production/crypto.py`: Fernet authenticated-encryption helper for credential values.
+- `app/production/worker.py` and `worker_main.py`: supervised polling worker that establishes the authenticated identity for each account before scheduler execution.
 
-### HTTP application
-- `app/api/main.py`: FastAPI application factory and lifespan.
-- `app/api/dependencies.py`: bearer-token authentication, identity_scope dependency, runtime dependency.
-- `app/api/schemas.py`: request/response schemas; never expose credential material.
-- `app/api/routes/auth.py`: registration and login.
-- `app/api/routes/goals.py`: create/list/get/pause/resume/cancel/run-now.
-- `app/api/routes/runs.py`: authenticated run history and status.
-- `app/api/routes/approvals.py`: list and respond to pending approvals.
-- `app/api/routes/health.py`: liveness/readiness.
+### Deployment and automation
+- `Dockerfile`: Python container running as a non-root user with a health check.
+- `docker-compose.yml`: single-host persistent data volume.
+- `.github/workflows/ci.yml`: dependency install, compile check, and full unittest suite.
+- `PRODUCTION_RUNBOOK.md`: configuration, container start, worker start, backup, and operations notes.
 
-### Production controls
-- `app/production/settings.py`: typed environment configuration and fail-fast validation.
-- `app/production/logging.py`: structured JSON logging and secret redaction.
-- `app/production/middleware.py`: request ID, security headers, bounded request size, safe CORS.
-- `app/production/crypto.py`: authenticated encryption for integration credentials.
-- `app/production/rate_limit.py`: per-client and per-account login/API rate limiting with a pluggable store.
-- `app/production/worker.py`: supervised worker entry point calling the Phase 7 scheduler.
-- `app/production/metrics.py`: basic process and queue metrics without exposing user data.
-
-### Persistence and deployment
-- Durable repository interfaces and migrations for auth, goals, runs, approvals/audit, credentials, and permission grants.
-- PostgreSQL adapter is the target for multi-instance deployment; SQLite remains a supported local mode.
-- Dockerfile, docker-compose configuration, environment template, startup scripts, and deployment/runbook docs.
-- CI workflow for lint, compile, unit/integration tests, dependency checks, and container build.
-
-## API contract
+## API routes
 
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
@@ -58,77 +47,69 @@ Shared infrastructure:
 - `POST /api/v1/goals/{goal_id}/cancel`
 - `POST /api/v1/goals/{goal_id}/run`
 - `GET /api/v1/goals/{goal_id}/runs`
-- `GET /api/v1/approvals`
-- `POST /api/v1/approvals/{approval_id}/approve`
-- `POST /api/v1/approvals/{approval_id}/reject`
 - `GET /health/live`
 - `GET /health/ready`
 
-Every authenticated endpoint derives tenant identity from a verified bearer token. User IDs in request bodies are rejected/ignored; never use them as authorization evidence.
+Interactive API docs are disabled by default. Set `PAAI_ENABLE_DOCS=true` only in a trusted development environment.
 
-## Security requirements
+## Configuration
 
-- Production secrets are required and validated at startup; no development fallback secret.
-- Password hashing remains PBKDF2 for compatibility unless a reviewed migration to Argon2id is included.
-- Access tokens remain short-lived. Add revocation/version checking and a documented logout strategy.
-- Credential encryption uses authenticated encryption (Fernet/AES-GCM) with key rotation guidance. Encryption keys never share the database or repository.
-- Rate-limit login and sensitive operations; avoid account enumeration in authentication errors.
-- CORS is explicit, not wildcard with credentials.
-- HTTPS is required at deployment ingress.
-- Request size/timeouts and allowed hosts are bounded.
-- Logs redact passwords, tokens, authorization headers, OAuth codes, and credential payloads.
-- API errors never expose stack traces or provider secrets.
-- Background worker re-establishes tenant identity from persisted goal ownership before running each job.
-- High-risk actions continue to require Phase 5 approval.
+Required:
+- `GROQ_API_KEY` for the default reasoning-only goal executor.
+- `PAAI_AUTH_SECRET`, a random secret of at least 32 characters.
 
-## Reliability and operations
+Optional settings are listed in `.env.example`. Configure explicit trusted origins in `PAAI_CORS_ORIGINS`; leave empty when no browser frontend is used.
 
-- Worker claims persisted jobs atomically and handles graceful shutdown.
-- Retries use bounded exponential backoff with jitter and idempotency keys.
-- Dead-letter/failed jobs are inspectable and can be retried by an authorized operator.
-- Readiness checks verify required dependencies; liveness does not depend on external LLM availability.
-- Database migrations are versioned and repeatable.
-- Backups, restore steps, retention, and incident response are documented.
-- Metrics cover request latency/errors, queue depth/age, run outcomes, approvals waiting, and worker health.
+## Run locally on Windows
 
-## Implementation sequence
+```powershell
+.\\venv\\Scripts\\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+# Edit .env and configure GROQ_API_KEY and PAAI_AUTH_SECRET
+.\\venv\\Scripts\\python.exe -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000
+```
 
-1. Stabilize Phase 7 interfaces and add production settings.
-2. Add durable repository/migration interfaces and encrypted credential persistence.
-3. Add FastAPI application, schemas, auth dependency, and route groups.
-4. Add approval and run APIs with ownership checks.
-5. Add worker entry point and graceful shutdown.
-6. Add logging, redaction, middleware, rate limiting, health, and metrics.
-7. Add Docker and CI workflows plus deployment/runbook docs.
-8. Add API/security/worker integration tests and full regression suite.
+Run the worker in a second PowerShell window:
 
-## Test plan
+```powershell
+.\\venv\\Scripts\\python.exe -m app.production.worker_main
+```
 
-- Authentication and tenant isolation at every route.
-- Expired, malformed, tampered, and revoked tokens rejected.
-- Password/credential/token values absent from logs and API responses.
-- CORS, host, request-size, and rate-limit behavior.
-- Goal CRUD and run/approval ownership enforcement.
-- Worker restart, duplicate delivery, graceful shutdown, and idempotency.
-- Credential encryption/decryption, wrong-key failure, and rotation behavior.
-- Database migration from the existing SQLite schema.
-- Health/readiness behavior when dependencies are unavailable.
-- Container starts as non-root and passes health check.
-- Full Phase 1–7 regression suite remains intact.
+## Security boundaries and known gaps
 
-## Acceptance criteria
+- TLS termination, trusted proxy configuration, firewall, managed secrets, backups, and host monitoring must be supplied by the deployment environment.
+- Rate limiting is in-memory and per process/IP; it is not distributed and is not a substitute for an edge/API gateway.
+- Request-size middleware checks Content-Length; an upstream reverse proxy must also enforce body-size and connection limits.
+- Logging redaction is best-effort. Application code must never log raw credentials, prompts containing secrets, or authorization headers.
+- The Fernet helper is not wired into Phase 5 CredentialManager. OAuth credentials remain in-memory and are not encrypted at rest.
+- Approval APIs and durable workflow/approval/audit storage are not implemented in this phase.
+- The default autonomy executor performs reasoning only. A trusted custom executor is required for external actions, and must use Phase 5 permissions and risk/approval controls.
+- Worker and API use SQLite and are intended for a single-host deployment. Multiple replicas need PostgreSQL and shared job leases/queue.
+- Token revocation, refresh-token rotation, email verification, password reset, and account lockout are not implemented.
+- No live deployment, load test, penetration test, backup restore exercise, or external-provider verification has been performed.
 
-- [ ] HTTP API exposes the documented authenticated operations.
-- [ ] Authentication middleware creates trusted identity scope for every protected request.
-- [ ] Persistent goal/run/approval/credential stores survive restart.
-- [ ] Credential encryption and secret redaction are verified.
-- [ ] Worker executes persisted due work and shuts down gracefully.
-- [ ] Rate limits, CORS, request bounds, health, logs, and metrics work.
-- [ ] Docker and CI pipelines are committed and reproducible.
-- [ ] API/security/worker integration and regression tests pass.
-- [ ] Deployment and operational runbooks are complete.
-- [ ] Phase 8 engineering review and final MCQ assessment complete.
+## Verification
 
-## Explicit production caveat
+```powershell
+.\\venv\\Scripts\\python.exe -m compileall -q app tests
+.\\venv\\Scripts\\python.exe -m unittest discover -s tests -v
+```
 
-A repository containing deployment files is not itself proof of a secure production deployment. Real production readiness still requires secret provisioning, HTTPS ingress, database backups, dependency scanning, load/security testing, alerting, and a live deployment exercise in the target environment.
+The Phase 8 test module includes credential encryption round-trip/wrong-key tests and authenticated API tenant-isolation tests. The CI workflow runs the complete suite on pushes and pull requests.
+
+## Acceptance checklist
+
+- [x] Authenticated FastAPI application and route modules authored.
+- [x] Request identity scope derived from verified bearer tokens.
+- [x] Authenticated goal operations and tenant checks.
+- [x] Health endpoints and basic request controls.
+- [x] Worker process entry point with per-account identity scope.
+- [x] Fernet encryption utility.
+- [x] Docker and Compose configuration.
+- [x] GitHub Actions CI workflow.
+- [x] Production runbook and configuration template.
+- [x] Focused Phase 8 tests authored.
+- [ ] Local installation, compile, full regression, and API tests run by the user.
+- [ ] CI workflow result verified.
+- [ ] Security review and deployment exercise completed.
+- [ ] Phase 8 MCQ assessment completed.
