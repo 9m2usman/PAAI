@@ -12,12 +12,7 @@ from app.autonomy.policy import AutonomyPolicy
 from app.autonomy.triggers import TriggerRegistry
 from app.autonomy.engine import AutonomyEngine
 from app.autonomy.scheduler import AutonomyScheduler
-
-
-def _executor_not_configured(description, limits):
-    raise RuntimeError(
-        "No autonomy executor was configured. Inject a trusted application executor."
-    )
+from app.autonomy.agent_executor import ReasoningGoalExecutor
 
 
 class MultiUserRuntime:
@@ -47,7 +42,7 @@ class MultiUserRuntime:
         )
         self.autonomy_engine = AutonomyEngine(
             self.goal_repository,
-            autonomy_executor or _executor_not_configured,
+            autonomy_executor or ReasoningGoalExecutor(),
             self.autonomy_policy,
         )
         self.scheduler = AutonomyScheduler(self.autonomy_engine)
