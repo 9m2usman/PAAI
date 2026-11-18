@@ -28,6 +28,7 @@ The code has been committed to the separate GitHub branch `phase5-hardening`. Th
 - `app/integrations/browser/playwright_driver.py`
 - `app/integrations/google_oauth.py`
 - `app/integrations/register_integrations.py`
+- `app/agents/integration_workflow_agent.py`
 - `app/integrations/gmail/gmail_connector.py`
 - `app/integrations/__init__.py`
 - `app/approvals/approval_manager.py`
