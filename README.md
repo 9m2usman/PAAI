@@ -17,7 +17,7 @@ PAAI is a reusable autonomous-agent codebase. Its roadmap builds from a single a
 
 - Python
 - Groq LLM API
-- SQLite for the existing memory layer
+- SQLite for account and memory storage
 - Gmail and Google Calendar REST APIs
 - Playwright for optional allowlisted browser automation
 
@@ -32,7 +32,6 @@ PAAI is a reusable autonomous-agent codebase. Its roadmap builds from a single a
 - `app/approvals/` — deterministic risk and approval management
 - `app/execution/` — controlled action execution and audit records
 - `app/workflows/` — ordered workflow execution
-- `app/agents/integration_workflow_agent.py` — validated LLM planning for real-world integration workflows
 - `app/documents/` — document processing
 - `tests/` — automated tests
 
@@ -49,6 +48,8 @@ Copy-Item .env.example .env
 
 Open `.env` and set `GROQ_API_KEY`. Keep `.env` private and never commit it.
 
+Set `PAAI_AUTH_SECRET` in the same local `.env` file to a random value of at least 32 characters. Never commit this secret.
+
 For optional browser automation, install the Chromium browser:
 
 ```powershell
@@ -64,7 +65,7 @@ For optional browser automation, install the Chromium browser:
 ## Phase 5 safety model
 
 - A user must have explicit permission for an integration action.
-- Low-risk actions may run automatically after permission is granted.
+- Low-risk actions may run automatically after tool permission is granted.
 - Medium-risk actions require approval unless that user separately grants automatic permission for the exact action.
 - High-risk actions always require human approval.
 - Unknown actions default to high risk.
@@ -72,17 +73,18 @@ For optional browser automation, install the Chromium browser:
 - OAuth credentials are user/integration scoped in the current in-memory prototype.
 - Browser automation requires an explicit HTTPS domain allowlist.
 
-See [PHASE_5.md](PHASE_5.md) for workflow usage, OAuth boundaries, tests, and current limitations.
-
-## Security warning
-
-This is a learning/prototype codebase, not a production deployment. Phase 5 stores OAuth credentials, workflow state, approvals, and audit events in memory. Credentials are not encrypted at rest. Authentication, durable tenant isolation, persistent encrypted secrets, a callback web server, and production deployment are future engineering work. Never commit `.env`, API keys, OAuth client secrets, access tokens, or refresh tokens.
-
+See [PHASE_5.md](PHASE_5.md) for workflow usage, OAuth boundaries, tests, and limitations.
 
 ## Phase 6 — Multi-user foundation
 
-Phase 6 adds email/password registration, PBKDF2 password hashing, signed expiring HS256 access tokens, a SQLite authentication repository, verified request identity contexts, tenant guards, identity-bound authorization, authenticated profile storage, and thread-safe user-scoped credential and permission managers.
+Phase 6 adds email/password registration, PBKDF2 password hashing, signed expiring HS256 access tokens, a SQLite authentication repository, verified request identity contexts, tenant guards, identity-bound authorization, authenticated profile and memory services, and thread-safe user-scoped credential and permission managers.
 
-Configure `PAAI_AUTH_SECRET` in your local `.env` with a random value of at least 32 characters. Never commit the secret. See [PHASE_6.md](PHASE_6.md) for the architecture, usage, security boundaries, and current limitations.
+The framework-independent runtime authenticates a token and installs the verified identity with `identity_scope` for each request. Use `runtime.memory` for memory operations; its public methods derive the user ID from the current authenticated identity rather than accepting a user ID from the caller.
 
-The current implementation is framework-independent. An HTTP authentication middleware and production deployment are later roadmap work. Credential and permission stores are still in-memory, and the existing low-level Phase 3 memory functions must only be called by trusted application code using the verified identity.
+See [PHASE_6.md](PHASE_6.md) for usage, architecture, security boundaries, and known limitations.
+
+## Security warning
+
+This is a learning/prototype codebase, not a production deployment. Credential, permission, workflow, approval, audit, OAuth-state, and browser-session storage are not yet a complete durable production design. Credentials are not encrypted at rest. The HTTP authentication middleware, token revocation, durable encrypted secrets, persistent workflow/approval/audit stores, and production deployment remain future engineering work.
+
+Never commit `.env`, API keys, OAuth client secrets, access tokens, refresh tokens, or `venv`.
