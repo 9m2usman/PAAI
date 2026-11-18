@@ -1,6 +1,6 @@
 # PAAI — Personal Autonomous Agent Infrastructure
 
-PAAI is a reusable autonomous-agent codebase. Its roadmap builds from a single agent to personalized memory, multi-agent orchestration, real-world integrations, multi-user isolation, background autonomy, and production deployment.
+PAAI is a reusable autonomous-agent platform built as one continuous codebase. Its roadmap progresses from a first agent to memory, orchestration, real-world workflows, multi-user identity, advanced autonomy, and production engineering.
 
 ## Roadmap
 
@@ -15,29 +15,29 @@ PAAI is a reusable autonomous-agent codebase. Its roadmap builds from a single a
 
 ## Technology
 
-- Python
-- Groq LLM API
-- SQLite for account and memory storage
-- Gmail and Google Calendar REST APIs
+- Python and Groq LLM API
+- SQLite for the current learning-stage persistence layer
+- FastAPI and Uvicorn for the HTTP application
+- Gmail and Google Calendar REST integrations
 - Playwright for optional allowlisted browser automation
+- Docker and GitHub Actions
 
 ## Project structure
 
 - `app/agents/` — agent implementations
-- `app/core/` — core runtime and configuration
+- `app/core/` — configuration, LLM client, and state
 - `app/memory/` — memory and personalization
 - `app/orchestration/` — multi-agent orchestration
 - `app/integrations/` — external service connectors and OAuth
-- `app/security/` — credentials and permissions
-- `app/approvals/` — deterministic risk and approval management
-- `app/execution/` — controlled action execution and audit records
-- `app/workflows/` — ordered workflow execution
-- `app/documents/` — document processing
+- `app/security/` and `app/access/` — credentials, permissions, authorization
+- `app/approvals/`, `app/execution/`, `app/workflows/` — controlled integration execution
+- `app/auth/`, `app/identity/`, `app/tenancy/` — authentication and tenant identity
+- `app/autonomy/` — persistent goals, scheduler, policy, autonomous execution
+- `app/api/` — FastAPI routes and request authentication
+- `app/production/` — settings, middleware, worker, logging, encryption helper
 - `tests/` — automated tests
 
 ## Windows setup
-
-Run these commands from the repository root in PowerShell:
 
 ```powershell
 python -m venv venv
@@ -46,45 +46,41 @@ python -m venv venv
 Copy-Item .env.example .env
 ```
 
-Open `.env` and set `GROQ_API_KEY`. Keep `.env` private and never commit it.
+Configure `GROQ_API_KEY` and set `PAAI_AUTH_SECRET` to a random value of at least 32 characters. Never commit `.env`.
 
-Set `PAAI_AUTH_SECRET` in the same local `.env` file to a random value of at least 32 characters. Never commit this secret.
-
-For optional browser automation, install the Chromium browser:
+## Run the API
 
 ```powershell
-.\\venv\\Scripts\\python.exe -m playwright install chromium
+.\\venv\\Scripts\\python.exe -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000
 ```
+
+The API is available at `http://127.0.0.1:8000`. Interactive docs are disabled unless `PAAI_ENABLE_DOCS=true`.
+
+## Run the background worker
+
+```powershell
+.\\venv\\Scripts\\python.exe -m app.production.worker_main
+```
+
+The worker uses the same databases and authentication secret as the API.
 
 ## Run tests
 
 ```powershell
+.\\venv\\Scripts\\python.exe -m compileall -q app tests
 .\\venv\\Scripts\\python.exe -m unittest discover -s tests -v
 ```
 
-## Phase 5 safety model
+## Safety model
 
-- A user must have explicit permission for an integration action.
-- Low-risk actions may run automatically after tool permission is granted.
-- Medium-risk actions require approval unless that user separately grants automatic permission for the exact action.
-- High-risk actions always require human approval.
-- Unknown actions default to high risk.
-- Approval is bound to exact parameters, expires after 15 minutes by default, and is single-use.
-- OAuth credentials are user/integration scoped in the current in-memory prototype.
-- Browser automation requires an explicit HTTPS domain allowlist.
+- User identity comes from a verified bearer token, not an LLM response or request-body user ID.
+- Goal and memory operations derive tenant identity from authenticated request context.
+- Phase 5 permissions and deterministic risk/approval rules remain the boundary for external side effects.
+- Phase 7's default goal executor is reasoning-only and has no external tools.
+- Never place credentials or tokens in prompts or logs.
 
-See [PHASE_5.md](PHASE_5.md) for workflow usage, OAuth boundaries, tests, and limitations.
+## Production limitations
 
-## Phase 6 — Multi-user foundation
+This is a production-oriented application foundation, not proof of production readiness. Current deployment uses single-host SQLite. TLS ingress, managed secrets, backups, monitoring/alerting, and live deployment verification remain operator responsibilities. The Fernet helper is not integrated into a durable encrypted OAuth credential vault. Approval APIs, distributed worker leases, PostgreSQL, and shared queues remain future hardening.
 
-Phase 6 adds email/password registration, PBKDF2 password hashing, signed expiring HS256 access tokens, a SQLite authentication repository, verified request identity contexts, tenant guards, identity-bound authorization, authenticated profile and memory services, and thread-safe user-scoped credential and permission managers.
-
-The framework-independent runtime authenticates a token and installs the verified identity with `identity_scope` for each request. Use `runtime.memory` for memory operations; its public methods derive the user ID from the current authenticated identity rather than accepting a user ID from the caller.
-
-See [PHASE_6.md](PHASE_6.md) for usage, architecture, security boundaries, and known limitations.
-
-## Security warning
-
-This is a learning/prototype codebase, not a production deployment. Credential, permission, workflow, approval, audit, OAuth-state, and browser-session storage are not yet a complete durable production design. Credentials are not encrypted at rest. The HTTP authentication middleware, token revocation, durable encrypted secrets, persistent workflow/approval/audit stores, and production deployment remain future engineering work.
-
-Never commit `.env`, API keys, OAuth client secrets, access tokens, refresh tokens, or `venv`.
+See [PHASE_7.md](PHASE_7.md), [PHASE_8.md](PHASE_8.md), and [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md).
