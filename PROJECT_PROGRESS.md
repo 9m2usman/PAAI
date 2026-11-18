@@ -10,43 +10,50 @@
 | 4 | Multi-agent orchestration | Implementation and tests reported passing; formal engineering assessment not explicitly confirmed |
 | 5 | Real-world workflow execution | Officially closed after hardening, regression tests, documentation review, and 9/10 MCQ assessment; live Google OAuth/Gmail/Calendar verification deferred |
 | 6 | Multi-user agent infrastructure | Implementation and authenticated-memory remediation committed on `phase6-multi-user`; user deferred final regression rerun and MCQ assessment |
-| 7 | Advanced autonomy | Initial implementation committed on `phase7-advanced-autonomy`; local tests and review pending |
-| 8 | Production engineering | Initial implementation committed on `phase8-production-engineering`; local tests and review pending |
+| 7 | Advanced autonomy | Blueprint and initial implementation committed on `phase7-advanced-autonomy`; local tests/review pending |
+| 8 | Production engineering | Blueprint and initial implementation committed on `phase8-production-engineering`; local tests/review pending |
 
-## Phase 7 — Advanced Autonomy
+## Current work
+
+PAAI remains one continuous codebase. Phase-specific branches preserve the existing `main` branch.
+
+### Phase 7 — Advanced Autonomy
 
 Branch: `phase7-advanced-autonomy`
 
-Implemented:
+Implemented foundation:
 - Persistent tenant-scoped goals and run history in SQLite.
-- Manual, one-time scheduled, and fixed-interval recurring goals.
-- Goal listing, inspection, pause, resume, cancel, and run-now.
-- Atomic due-goal claiming and a one-tick scheduler.
+- Manual goals, one-time scheduled goals, and fixed-interval recurring goals.
+- Goal listing, inspection, pause, resume, cancel, and run-now operations.
+- Atomic due-goal claiming.
 - Deterministic step/runtime/batch/payload limits.
-- Safe reasoning-only default executor; trusted custom executor injection.
+- Scheduler tick and execution engine.
+- Safe reasoning-only default executor; custom trusted executors can be injected.
 - Allowlisted event type and payload validation.
-- Focused Phase 7 test suite.
+- Focused test suite authored.
 
-Remaining boundaries: local tests not run; durable event dispatch and approval-resume integration incomplete; fixed-interval scheduling only; runtime limit checked after executor returns; custom executor must enforce hard timeout and Phase 5 permissions.
+Remaining boundaries: local tests not yet run; event dispatch and approval-resume integration are not complete; fixed interval scheduling only; custom executor must enforce hard runtime and integration permissions.
 
-## Phase 8 — Production Engineering
+### Phase 8 — Production Engineering
 
 Branch: `phase8-production-engineering`
 
-Implemented:
-- FastAPI registration/login/me and authenticated goal create/list/get/pause/resume/cancel/run/history routes.
-- Bearer-token verification and request-local identity scope.
-- Health/readiness endpoints.
-- Environment configuration, request IDs, basic security headers, Content-Length limit, process-local per-IP rate limiting, explicit CORS validation.
-- Best-effort secret-redaction logging filter and Fernet encryption helper.
+Implemented foundation:
+- FastAPI app factory with register/login/me routes.
+- Authenticated goal CRUD/control/run/history routes.
+- Bearer token verification and request-local identity scope.
+- Health and readiness endpoints.
+- Environment settings validation, request IDs, basic security headers, in-memory per-IP rate limiting, explicit CORS.
+- Secret-redaction logging filter.
+- Fernet credential-encryption utility.
 - Background worker entry point that scopes each registered principal separately.
-- Dockerfile, Docker Compose API/worker services, GitHub Actions CI workflow, production runbook, API and crypto tests.
+- Dockerfile, Docker Compose, GitHub Actions CI workflow, production runbook, and focused crypto tests.
 
-Remaining boundaries: tests/CI not run; Fernet helper is not wired into Phase 5's in-memory CredentialManager; approvals are not exposed through the HTTP API; default goal execution is reasoning-only; rate limiting is process-local; deployment is single-host SQLite and requires external TLS ingress, monitoring, backups, and secret management.
+Remaining boundaries: local tests/CI not yet run; Fernet helper is not yet wired into the Phase 5 in-memory credential manager; approvals are not exposed through the HTTP API; the default autonomy executor is reasoning-only; rate limiting is process-local; deployment is single-host SQLite and requires TLS ingress supplied by the host.
 
 ## Phase 6 pending user review
 
-The user deferred the complete Phase 6 test rerun and MCQ assessment. The authenticated memory facade and actual Phase 3 memory-isolation tests are committed on the Phase 6 branch. Do not mark Phase 6 formally closed until the user returns to tests and assessment.
+The user explicitly deferred Phase 6's complete test rerun and MCQ assessment. The authenticated memory facade and actual Phase 3 memory-isolation tests are committed on the Phase 6 branch. Do not claim Phase 6 is formally closed until the user returns to its tests and assessment.
 
 ## Repository workflow
 
