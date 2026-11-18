@@ -12,7 +12,8 @@ class RiskEvaluator:
         "purchase",
         "pay",
         "transfer",
-        "publish"
+        "publish",
+        "click"
     }
 
     MEDIUM_RISK_ACTIONS = {
@@ -23,7 +24,6 @@ class RiskEvaluator:
         "update_record",
         "update_event",
         "modify",
-        "click",
         "fill",
         "create_document"
     }
