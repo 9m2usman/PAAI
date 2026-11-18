@@ -26,15 +26,16 @@ PAAI is a reusable autonomous-agent platform built as one continuous codebase. I
 
 - `app/agents/` — agent implementations
 - `app/core/` — configuration, LLM client, and state
-- `app/memory/` — memory and personalization
+- `app/memory/` — memory, personalization, authenticated memory facade
 - `app/orchestration/` — multi-agent orchestration
 - `app/integrations/` — external service connectors and OAuth
 - `app/security/` and `app/access/` — credentials, permissions, authorization
-- `app/approvals/`, `app/execution/`, `app/workflows/` — controlled integration execution
+- `app/approvals/` — deterministic risk and approval management
+- `app/execution/` and `app/workflows/` — controlled integration execution
 - `app/auth/`, `app/identity/`, `app/tenancy/` — authentication and tenant identity
-- `app/autonomy/` — persistent goals, scheduler, policy, autonomous execution
+- `app/autonomy/` — persistent goals, scheduler, policy, and autonomous execution
 - `app/api/` — FastAPI routes and request authentication
-- `app/production/` — settings, middleware, worker, logging, encryption helper
+- `app/production/` — settings, middleware, worker, logging, and encryption utility
 - `tests/` — automated tests
 
 ## Windows setup
@@ -74,13 +75,13 @@ The worker uses the same databases and authentication secret as the API.
 ## Safety model
 
 - User identity comes from a verified bearer token, not an LLM response or request-body user ID.
-- Goal and memory operations derive tenant identity from authenticated request context.
-- Phase 5 permissions and deterministic risk/approval rules remain the boundary for external side effects.
-- Phase 7's default goal executor is reasoning-only and has no external tools.
+- Goal and memory operations derive tenant identity from the authenticated request context.
+- Phase 5 tool permissions and deterministic risk/approval rules remain the boundary for external side effects.
+- Phase 7's default goal executor is reasoning-only; it has no external tools.
 - Never place credentials or tokens in prompts or logs.
 
 ## Production limitations
 
-This is a production-oriented application foundation, not proof of production readiness. Current deployment uses single-host SQLite. TLS ingress, managed secrets, backups, monitoring/alerting, and live deployment verification remain operator responsibilities. The Fernet helper is not integrated into a durable encrypted OAuth credential vault. Approval APIs, distributed worker leases, PostgreSQL, and shared queues remain future hardening.
+This repository contains a production-oriented application foundation, not proof of production readiness. The current deployment uses single-host SQLite. TLS ingress, managed secret storage, backups, monitoring/alerting, and a live deployment exercise remain host/operator responsibilities. The Fernet helper is not yet integrated into a durable encrypted OAuth credential vault. Approval APIs, distributed worker leases, PostgreSQL, and a shared queue are future hardening.
 
 See [PHASE_7.md](PHASE_7.md), [PHASE_8.md](PHASE_8.md), and [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md).
