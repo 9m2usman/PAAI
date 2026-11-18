@@ -1,11 +1,18 @@
 import unittest
+import tempfile
+from pathlib import Path
+from urllib.request import Request
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from app.approvals.approval_manager import ApprovalManager
 from app.approvals.risk_evaluator import RiskEvaluator
 from app.execution.audit_logger import AuditLogger
 from app.execution.execution_manager import ExecutionManager
-from app.integrations.api_connector import APIConnector
+from app.integrations.api_connector import APIConnector, _NoRedirectHandler
+from app.integrations.gmail.gmail_connector import GmailConnector
+from app.integrations.calendar.calendar_connector import CalendarConnector
+from app.documents.document_processor import DocumentProcessor
 from app.integrations.browser.browser_connector import BrowserConnector
 from app.integrations.google_oauth import GoogleOAuthManager
 from app.integrations.integration_registry import IntegrationRegistry
@@ -162,6 +169,20 @@ class TestGoogleOAuthState(unittest.TestCase):
             with self.assertRaisesRegex(PermissionError, "expired"):
                 self.oauth.exchange_code("user_a", "auth-code", state)
 
+    def test_failed_exchange_still_consumes_state(self):
+        url = self.oauth.create_authorization_url("user_a")
+        state = url.split("state=")[-1]
+
+        with patch.object(
+            self.oauth,
+            "_send_token_request",
+            side_effect=RuntimeError("Token endpoint failed.")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.oauth.exchange_code("user_a", "auth-code", state)
+
+        self.assertNotIn(state, self.oauth.pending_states)
+
     def test_successful_exchange_consumes_state(self):
         url = self.oauth.create_authorization_url("user_a")
         state = url.split("state=")[-1]
@@ -264,6 +285,241 @@ class TestAPIConnectorValidation(unittest.TestCase):
     def test_non_https_base_url_is_rejected(self):
         with self.assertRaises(ValueError):
             APIConnector("unsafe", "http://api.example.com")
+
+    def test_redirect_handler_rejects_redirects(self):
+        request = Request("https://api.example.com/data")
+        handler = _NoRedirectHandler()
+
+        with self.assertRaises(HTTPError):
+            handler.redirect_request(
+                request,
+                None,
+                302,
+                "Found",
+                {},
+                "https://attacker.invalid/data"
+            )
+
+
+class TestGmailConnector(unittest.TestCase):
+
+    def setUp(self):
+        self.connector = GmailConnector()
+        self.credentials = {"access_token": "test-token"}
+
+    def test_list_emails_builds_expected_api_request(self):
+        with patch.object(
+            self.connector.api,
+            "execute",
+            return_value={"messages": []}
+        ) as mock_execute:
+            self.connector.execute(
+                "list_emails",
+                {"max_results": 5, "query": "is:unread"},
+                self.credentials
+            )
+
+        args = mock_execute.call_args.args
+        self.assertEqual(args[0], "read")
+        self.assertEqual(
+            args[1]["path"],
+            "gmail/v1/users/me/messages"
+        )
+        self.assertEqual(args[1]["query"]["maxResults"], 5)
+        self.assertEqual(args[1]["query"]["q"], "is:unread")
+
+    def test_read_email_encodes_message_id_as_one_path_segment(self):
+        with patch.object(
+            self.connector.api,
+            "execute",
+            return_value={"id": "abc/def"}
+        ) as mock_execute:
+            self.connector.execute(
+                "read_email",
+                {"message_id": "abc/def"},
+                self.credentials
+            )
+
+        path = mock_execute.call_args.args[1]["path"]
+        self.assertTrue(path.endswith("abc%2Fdef"))
+
+    def test_create_draft_uses_drafts_endpoint(self):
+        with patch.object(
+            self.connector.api,
+            "execute",
+            return_value={"id": "draft-1"}
+        ) as mock_execute:
+            self.connector.execute(
+                "create_draft",
+                {
+                    "to": "person@example.com",
+                    "subject": "Hello",
+                    "body": "Draft body"
+                },
+                self.credentials
+            )
+
+        self.assertEqual(
+            mock_execute.call_args.args[1]["path"],
+            "gmail/v1/users/me/drafts"
+        )
+
+    def test_send_email_uses_send_endpoint(self):
+        with patch.object(
+            self.connector.api,
+            "execute",
+            return_value={"id": "sent-1"}
+        ) as mock_execute:
+            self.connector.execute(
+                "send_email",
+                {
+                    "to": "person@example.com",
+                    "subject": "Hello",
+                    "body": "Email body"
+                },
+                self.credentials
+            )
+
+        self.assertEqual(
+            mock_execute.call_args.args[1]["path"],
+            "gmail/v1/users/me/messages/send"
+        )
+
+    def test_invalid_list_limit_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.connector.execute(
+                "list_emails",
+                {"max_results": 1000},
+                self.credentials
+            )
+
+
+class TestCalendarConnector(unittest.TestCase):
+
+    def setUp(self):
+        self.connector = CalendarConnector()
+        self.credentials = {"access_token": "test-token"}
+
+    def test_list_events_uses_calendar_endpoint(self):
+        with patch.object(
+            self.connector.api,
+            "execute",
+            return_value={"items": []}
+        ) as mock_execute:
+            self.connector.execute(
+                "list_events",
+                {"max_results": 3},
+                self.credentials
+            )
+
+        self.assertEqual(mock_execute.call_args.args[0], "read")
+        self.assertEqual(
+            mock_execute.call_args.args[1]["path"],
+            "calendar/v3/calendars/primary/events"
+        )
+
+    def test_create_event_validates_required_fields(self):
+        with self.assertRaises(ValueError):
+            self.connector.execute(
+                "create_event",
+                {"event": {"summary": "Missing dates"}},
+                self.credentials
+            )
+
+    def test_create_event_uses_post_mapping(self):
+        with patch.object(
+            self.connector.api,
+            "execute",
+            return_value={"id": "event-1"}
+        ) as mock_execute:
+            self.connector.execute(
+                "create_event",
+                {
+                    "event": {
+                        "summary": "Meeting",
+                        "start": {"dateTime": "2026-11-20T10:00:00Z"},
+                        "end": {"dateTime": "2026-11-20T10:30:00Z"}
+                    }
+                },
+                self.credentials
+            )
+
+        self.assertEqual(mock_execute.call_args.args[0], "create")
+
+    def test_update_event_encodes_event_id(self):
+        with patch.object(
+            self.connector.api,
+            "execute",
+            return_value={"id": "event/1"}
+        ) as mock_execute:
+            self.connector.execute(
+                "update_event",
+                {
+                    "event_id": "event/1",
+                    "event": {"summary": "Updated"}
+                },
+                self.credentials
+            )
+
+        path = mock_execute.call_args.args[1]["path"]
+        self.assertTrue(path.endswith("event%2F1"))
+
+    def test_delete_event_uses_delete_mapping(self):
+        with patch.object(
+            self.connector.api,
+            "execute",
+            return_value={"status_code": 204}
+        ) as mock_execute:
+            self.connector.execute(
+                "delete_event",
+                {"event_id": "event-1"},
+                self.credentials
+            )
+
+        self.assertEqual(mock_execute.call_args.args[0], "delete")
+
+
+class TestDocumentProcessor(unittest.TestCase):
+
+    def test_create_and_read_document(self):
+        with tempfile.TemporaryDirectory() as directory:
+            processor = DocumentProcessor(directory)
+
+            processor.create_document(
+                "notes.md",
+                "Phase 5 document"
+            )
+
+            result = processor.read_document("notes.md")
+
+            self.assertEqual(result["content"], "Phase 5 document")
+
+    def test_path_traversal_is_blocked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            processor = DocumentProcessor(directory)
+
+            with self.assertRaises(PermissionError):
+                processor.read_document("../outside.txt")
+
+    def test_unsupported_format_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            processor = DocumentProcessor(directory)
+
+            with self.assertRaises(ValueError):
+                processor.read_document("payload.exe")
+
+    def test_oversized_document_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            processor = DocumentProcessor(
+                directory,
+                max_file_size=5
+            )
+
+            path = Path(directory) / "large.txt"
+            path.write_text("This is too large.", encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                processor.read_document("large.txt")
 
 
 class TestIntegrationExecution(unittest.TestCase):
