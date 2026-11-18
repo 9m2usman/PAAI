@@ -31,7 +31,13 @@ class ExecutionManager:
     ):
 
         if not isinstance(user_id, str) or not user_id.strip():
-            raise ValueError("Valid user ID is required.")
+            raise ValueError("Valid authenticated user ID is required.")
+
+        if not isinstance(integration, str) or not integration.strip():
+            raise ValueError("Valid integration name is required.")
+
+        if not isinstance(action, str) or not action.strip():
+            raise ValueError("Valid integration action is required.")
 
         if not isinstance(parameters, dict):
             raise ValueError("Parameters must be a dictionary.")
@@ -40,7 +46,6 @@ class ExecutionManager:
         action = action.strip().lower()
 
         connector = self.integration_registry.get(integration)
-
         supported_actions = connector.get_supported_actions()
 
         if action not in supported_actions:
