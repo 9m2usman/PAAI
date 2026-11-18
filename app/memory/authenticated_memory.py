@@ -16,7 +16,7 @@ class AuthenticatedMemoryService:
     """Expose Phase 3 memory operations without accepting caller-selected user IDs."""
 
     def __init__(self, database_path=DATABASE_PATH):
-        self.database_path = database_path
+        self.database_path = DATABASE_PATH if database_path is None else database_path
 
     def _user_id(self):
         return current_identity().user_id
