@@ -45,11 +45,11 @@ Implemented foundation:
 - Health and readiness endpoints.
 - Environment settings validation, request IDs, basic security headers, in-memory per-IP rate limiting, explicit CORS.
 - Secret-redaction logging filter.
-- Fernet credential-encryption utility.
+- Fernet encryption wired into persistent per-user Google OAuth credential storage.\n- Authenticated Google connect/status/disconnect routes and state-validated callback.
 - Background worker entry point that scopes each registered principal separately.
 - Dockerfile, Docker Compose, GitHub Actions CI workflow, production runbook, and focused crypto tests.
 
-Remaining boundaries: local tests/CI not yet run; Fernet helper is not yet wired into the Phase 5 in-memory credential manager; approvals are not exposed through the HTTP API; the default autonomy executor is reasoning-only; rate limiting is process-local; deployment is single-host SQLite and requires TLS ingress supplied by the host.
+Remaining boundaries: local tests/CI not yet run; Google OAuth state is process-local (run one API process for callback flow); approvals are not exposed through the HTTP API; the default autonomy executor is reasoning-only; rate limiting is process-local; deployment is single-host SQLite and requires TLS ingress supplied by the host.
 
 ## Phase 6 pending user review
 
