@@ -16,8 +16,13 @@ A separate worker process loads the same runtime and iterates trusted principals
 - `app/api/main.py`: application factory and lifespan.
 - `app/api/dependencies.py`: bearer-token authentication and request-local identity scope.
 - `app/api/schemas.py`: bounded request/response models.
-- `app/api/routes/auth.py`: registration, login, current-user endpoint.\n- `app/api/routes/google_oauth.py`: authenticated connect/status/disconnect and state-bound OAuth callback.
-- `app/api/routes/goals.py`: create/list/get/pause/resume/cancel/run-now and run history.\n- `app/api/routes/events.py`: authenticated durable event ingestion for registered event-goal triggers.\n- `app/api/routes/workflows.py`: authenticated Phase 5 workflow execution, inspection, approval, rejection, and resume endpoints.\n- `app/api/routes/permissions.py`: owner-scoped grants and revocation for explicitly allowlisted integration actions; automatic permission grants are not exposed.
+- `app/api/routes/auth.py`: registration, login, current-user endpoint.
+- `app/api/routes/google_oauth.py`: authenticated connect/status/disconnect and state-bound OAuth callback.
+- `app/api/routes/goals.py`: create/list/get/pause/resume/cancel/run-now and run history.
+- `app/api/routes/events.py`: authenticated durable event ingestion for registered event-goal triggers.
+- `app/api/routes/workflows.py`: authenticated Phase 5 workflow execution, inspection, approval, rejection, and resume endpoints.
+- Approval decisions are idempotently recoverable when a process stops after recording approval but before workflow resumption.
+- `app/api/routes/permissions.py`: owner-scoped grants and revocation for explicitly allowlisted integration actions; automatic permission grants are not exposed.
 - `app/api/routes/health.py`: liveness and readiness.
 - Every goal route calls tenant-scoped services. No route accepts a user ID as proof of identity.
 
@@ -25,7 +30,12 @@ A separate worker process loads the same runtime and iterates trusted principals
 - `app/production/settings.py`: environment-backed configuration and required authentication secret validation.
 - `app/production/middleware.py`: request IDs, response security headers, Content-Length request-size bound, and process-local per-IP rate limit.
 - `app/production/logging.py`: best-effort redaction filter for common token/password/secret patterns.
-- `app/production/crypto.py`: Fernet authenticated-encryption helper for credential values.\n- `app/security/credential_manager.py`: SQLite-backed, per-user credential storage; token payloads are encrypted with Fernet and connections close deterministically.
+- `app/production/crypto.py`: Fernet authenticated-encryption helper for credential values.
+- `app/security/credential_manager.py`: SQLite-backed, per-user credential storage; token payloads are encrypted with Fernet and connections close deterministically.
+- `app/approvals/approval_manager.py`: SQLite-backed, tenant-scoped approvals with expiry, exact-action fingerprints, and atomic single-use consumption.
+- `app/workflows/workflow_manager.py`: SQLite-backed workflow state and progress. A process restart marks an action interrupted while in flight as `execution_uncertain`; it is never automatically replayed.
+- `app/security/permission_manager.py`: SQLite-backed user action grants and automatic-execution grants.
+- `app/autonomy/approval_bridge.py`: durable association between an autonomy run and its approval-gated workflow, including restart reconciliation.
 - `app/production/worker.py` and `worker_main.py`: supervised polling worker that establishes the authenticated identity for each account before scheduler execution.
 
 ### Deployment and automation
@@ -36,10 +46,22 @@ A separate worker process loads the same runtime and iterates trusted principals
 
 ## API routes
 
-- `GET /api/v1/integrations/google/connect` (authenticated; returns Google authorization URL)\n- `GET /auth/google/callback` (Google redirect; validates one-time OAuth state)\n- `GET /api/v1/integrations/google/status` (authenticated)\n- `DELETE /api/v1/integrations/google/disconnect` (authenticated)\n- `POST /api/v1/auth/register`
+- `GET /api/v1/integrations/google/connect` (authenticated; returns Google authorization URL)
+- `GET /auth/google/callback` (Google redirect; validates one-time OAuth state)
+- `GET /api/v1/integrations/google/status` (authenticated)
+- `DELETE /api/v1/integrations/google/disconnect` (authenticated)
+- `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
-- `POST /api/v1/events` (authenticated; idempotent event ingestion and matching event-goal queue)\n- `GET /api/v1/permissions` (list the current user's integration permissions)\n- `POST /api/v1/permissions` (grant one supported integration action)\n- `DELETE /api/v1/permissions/{integration}/{action}` (revoke an action permission)\n- `POST /api/v1/workflows` (authenticated; plan and start an integration workflow)\n- `GET /api/v1/workflows/{workflow_id}` (owner-scoped workflow status)\n- `POST /api/v1/workflows/{workflow_id}/approve` (approve the exact pending action and resume)\n- `POST /api/v1/workflows/{workflow_id}/reject` (reject the pending action)\n- `POST /api/v1/goals`
+- `POST /api/v1/events` (authenticated; idempotent event ingestion and matching event-goal queue)
+- `GET /api/v1/permissions` (list the current user's integration permissions)
+- `POST /api/v1/permissions` (grant one supported integration action)
+- `DELETE /api/v1/permissions/{integration}/{action}` (revoke an action permission)
+- `POST /api/v1/workflows` (authenticated; plan and start an integration workflow)
+- `GET /api/v1/workflows/{workflow_id}` (owner-scoped workflow status)
+- `POST /api/v1/workflows/{workflow_id}/approve` (approve the exact pending action and resume)
+- `POST /api/v1/workflows/{workflow_id}/reject` (reject the pending action)
+- `POST /api/v1/goals`
 - `GET /api/v1/goals`
 - `GET /api/v1/goals/{goal_id}`
 - `POST /api/v1/goals/{goal_id}/pause`
@@ -82,8 +104,8 @@ Run the worker in a second PowerShell window:
 - Request-size middleware checks Content-Length; an upstream reverse proxy must also enforce body-size and connection limits.
 - Logging redaction is best-effort. Application code must never log raw credentials, prompts containing secrets, or authorization headers.
 - Google OAuth credentials are stored per user in `PAAI_CREDENTIAL_DATABASE`, encrypted at rest with `PAAI_CREDENTIAL_ENCRYPTION_KEY`. Back up the key separately; losing it makes stored credentials unrecoverable. OAuth authorization state is single-use and expires after ten minutes; pending state is currently process-local, so keep the API as one process during OAuth callback.
-- Phase 5 workflow execution and exact-action approval/resume are now exposed through authenticated API routes. Users can grant only actions advertised by registered connectors; high-risk and non-automatic medium-risk actions still require approval. The workflow manager and approval manager are still process-local, so pending workflows do not survive an API process restart. They are not yet linked back to a paused Phase 7 autonomy run; that cross-lifecycle persistence/resume integration remains outstanding.
-- The default autonomy executor performs reasoning only. A trusted custom executor is required for external actions, and must use Phase 5 permissions and risk/approval controls.
+- Phase 5 workflow execution, exact-action approval/resume, and permission management are exposed through authenticated API routes. Approval, workflow, and permission state persist in the configured SQLite database. Approval records are owner-scoped, expire, bind to a fingerprint of the exact action, and can be consumed only once. A crash during an external action is represented as `execution_uncertain` and is not automatically retried. Approval-gated workflows started by the opt-in autonomy integration executor are linked to their original goal run; restart reconciliation repairs a workflow/run link if the process stops between the two durable writes.
+- The default autonomy executor performs reasoning only. Set `PAAI_ENABLE_INTEGRATION_GOAL_EXECUTOR=true` to opt into converting goal descriptions into Phase 5 integration workflows. Connector permissions and deterministic risk/approval checks still apply; the setting defaults to false.
 - Worker and API use SQLite and are intended for a single-host deployment. Multiple replicas need PostgreSQL and shared job leases/queue.
 - Token revocation, refresh-token rotation, email verification, password reset, and account lockout are not implemented.
 - No live deployment, load test, penetration test, backup restore exercise, or external-provider verification has been performed.
@@ -95,16 +117,23 @@ Run the worker in a second PowerShell window:
 .\\venv\\Scripts\\python.exe -m unittest discover -s tests -v
 ```
 
-The Phase 8 test module includes credential encryption round-trip/wrong-key tests and authenticated API tenant-isolation tests. The CI workflow runs the complete suite on pushes and pull requests.
+The Phase 8 test modules include credential encryption, API tenant isolation, durable approval and permission persistence, exact-action binding, single-use consumption, workflow restart recovery, and autonomy run linkage. The CI workflow runs the complete suite on pushes and pull requests. The newly added durability tests still require a fresh local run and CI verification.
 
 ## Acceptance checklist
 
 - [x] Authenticated FastAPI application and route modules authored.
 - [x] Request identity scope derived from verified bearer tokens.
-- [x] Authenticated goal operations and tenant checks.\n- [x] Authenticated durable event ingestion and event-goal dispatch.\n- [x] Authenticated Phase 5 workflow, permission grant/revocation, and exact-action approval/resume API integration.\n- [ ] Durable workflow/approval state and automatic resumption of the originating autonomy run.
+- [x] Authenticated goal operations and tenant checks.
+- [x] Authenticated durable event ingestion and event-goal dispatch.
+- [x] Authenticated Phase 5 workflow, permission grant/revocation, and exact-action approval/resume API integration.
+- [x] Durable tenant-scoped approval, workflow, and permission state.
+- [x] Exact-action approval fingerprint, expiry, and single-use consumption.
+- [x] Approval-gated workflow linked to its original autonomy goal run.
+- [x] Restart reconciliation and fail-closed handling of uncertain in-flight external actions.
 - [x] Health endpoints and basic request controls.
 - [x] Worker process entry point with per-account identity scope.
-- [x] Fernet encryption utility wired into persistent per-user Google credential storage.\n- [x] Google OAuth connect/callback/status/disconnect API routes.
+- [x] Fernet encryption utility wired into persistent per-user Google credential storage.
+- [x] Google OAuth connect/callback/status/disconnect API routes.
 - [x] Docker and Compose configuration.
 - [x] GitHub Actions CI workflow.
 - [x] Production runbook and configuration template.

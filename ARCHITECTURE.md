@@ -74,8 +74,11 @@ flowchart TD
 | Long-term memory | Existing Phase 3 SQLite store + authenticated facade | Low-level functions still accept user IDs internally |
 | Goals and runs | SQLite | Tenant-scoped; single-host scheduler |
 | Credentials | SQLite credential store with Fernet encryption | Encryption key must be backed up separately; OAuth pending state is process-local |
-| Permissions | In-memory manager | Lost on restart |
-| Workflows/approvals/audit | In-memory Phase 5 managers | Not durable across restart |
+| Permissions | SQLite manager | Per-user action grants persist; automatic grants are distinct from ordinary grants |
+| Workflows | SQLite workflow state | Interrupted in-flight external actions become `execution_uncertain`; no automatic replay |
+| Approvals | SQLite approval store | Owner-scoped, expiring, exact-action fingerprint, single-use consumption |
+| Autonomy approval links | SQLite link table | Associates a workflow with its originating goal/run and reconciles interrupted writes |
+| Audit | In-memory logger | Audit history is not yet durable across process restart |
 
 ## Trust boundaries
 
@@ -87,6 +90,6 @@ flowchart TD
 
 ## Deployment model and limitations
 
-The committed deployment foundation is a single-host SQLite setup. It is not horizontally scalable. A multi-instance deployment requires PostgreSQL, distributed job leases/queue, durable workflow/approval/audit storage, encrypted credential persistence, distributed rate limiting, and operational secret management.
+The committed deployment foundation is a single-host SQLite setup. It is not horizontally scalable. A multi-instance deployment requires PostgreSQL, distributed job leases/queue, distributed rate limiting, and operational secret management. Audit records remain in-memory and need durable storage before relying on them for compliance or long-term incident investigation.
 
 The repository does not claim production readiness until local tests and CI are green, security/load testing is performed, backups are restored successfully, TLS ingress and monitoring are configured, and a live deployment is verified.

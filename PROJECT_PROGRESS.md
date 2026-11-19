@@ -11,7 +11,7 @@
 | 5 | Real-world workflow execution | Officially closed after hardening, regression tests, documentation review, and 9/10 MCQ assessment; live Google OAuth/Gmail/Calendar verification deferred |
 | 6 | Multi-user agent infrastructure | Implementation and authenticated-memory remediation committed on `phase6-multi-user`; user deferred final regression rerun and MCQ assessment |
 | 7 | Advanced autonomy | Blueprint and initial implementation committed on `phase7-advanced-autonomy`; local tests/review pending |
-| 8 | Production engineering | Blueprint and initial implementation committed on `phase8-production-engineering`; local tests/review pending |
+| 8 | Production engineering | Core implementation plus durable workflow/approval integration committed on `phase8-production-engineering`; fresh local regression and CI verification pending |
 
 ## Current work
 
@@ -48,9 +48,14 @@ Implemented foundation:
 - Fernet encryption wired into persistent per-user Google OAuth credential storage.
 - Authenticated Google connect/status/disconnect routes and state-validated callback.
 - Background worker entry point that scopes each registered principal separately.
+- Durable SQLite approval records with expiry, exact-action fingerprinting, tenant isolation, and single-use consumption.
+- Durable workflow state and progress; interrupted external actions fail closed as `execution_uncertain` rather than being replayed.
+- Durable per-user integration permissions, including distinct explicit automatic-execution grants.
+- Durable bridge from an approval-gated integration workflow to its originating autonomy goal/run, including restart reconciliation.
+- Optional integration-backed goal executor controlled by `PAAI_ENABLE_INTEGRATION_GOAL_EXECUTOR`; reasoning-only remains the default.
 - Dockerfile, Docker Compose, GitHub Actions CI workflow, production runbook, and focused crypto tests.
 
-Remaining boundaries: local tests/CI not yet run; Google OAuth state is process-local (run one API process for callback flow); approvals are not exposed through the HTTP API; the default autonomy executor is reasoning-only; rate limiting is process-local; deployment is single-host SQLite and requires TLS ingress supplied by the host.
+Remaining boundaries: the newly added durability tests and full regression suite still need a fresh local run and CI verification; Google OAuth state is process-local (run one API process for callback flow); audit logging is still in-memory; integration-backed goal execution is opt-in and defaults off; rate limiting is process-local; deployment is single-host SQLite and requires TLS ingress supplied by the host.
 
 ## Phase 6 pending user review
 
