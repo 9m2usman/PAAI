@@ -13,6 +13,7 @@ from app.autonomy.triggers import TriggerRegistry
 from app.autonomy.engine import AutonomyEngine
 from app.autonomy.scheduler import AutonomyScheduler
 from app.autonomy.agent_executor import ReasoningGoalExecutor
+from app.integrations.google_oauth import GoogleOAuthManager
 
 
 class MultiUserRuntime:
@@ -24,6 +25,9 @@ class MultiUserRuntime:
         memory_database=None,
         autonomy_database="data/paai_autonomy.db",
         autonomy_executor=None,
+        google_oauth_config=None,
+        credential_database=None,
+        credential_encryption_key=None,
     ):
         self.auth_repository = AuthRepository(auth_database)
         self.token_service = TokenService(token_secret, token_lifetime_seconds)
@@ -32,7 +36,18 @@ class MultiUserRuntime:
         self.memory = AuthenticatedMemoryService(
             memory_database if memory_database is not None else None
         )
-        self.credentials = CredentialManager()
+        self.credentials = CredentialManager(
+            database_path=credential_database,
+            encryption_key=credential_encryption_key,
+        )
+        self.google_oauth = None
+        if google_oauth_config:
+            self.google_oauth = GoogleOAuthManager(
+                client_id=google_oauth_config["client_id"],
+                client_secret=google_oauth_config["client_secret"],
+                redirect_uri=google_oauth_config["redirect_uri"],
+                credential_manager=self.credentials,
+            )
         self.permissions = PermissionManager()
         self.autonomy_policy = AutonomyPolicy()
         self.goal_repository = GoalRepository(autonomy_database)
