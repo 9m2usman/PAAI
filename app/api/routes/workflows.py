@@ -18,6 +18,11 @@ def create_workflow(payload: WorkflowCreateRequest, request: Request,
         raise HTTPException(status_code=422, detail=str(error)) from None
 
 
+@router.get("/pending")
+def list_pending_workflows(request: Request, identity=Depends(authenticated_identity)):
+    return get_runtime(request).workflow_manager.list_pending_workflows(identity.user_id)
+
+
 @router.get("/{workflow_id}")
 def get_workflow(workflow_id: str, request: Request,
                  identity=Depends(authenticated_identity)):
