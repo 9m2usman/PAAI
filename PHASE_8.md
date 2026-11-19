@@ -16,7 +16,7 @@ A separate worker process loads the same runtime and iterates trusted principals
 - `app/api/main.py`: application factory and lifespan.
 - `app/api/dependencies.py`: bearer-token authentication and request-local identity scope.
 - `app/api/schemas.py`: bounded request/response models.
-- `app/api/routes/auth.py`: registration, login, current-user endpoint.
+- `app/api/routes/auth.py`: registration, login, current-user endpoint.\n- `app/api/routes/google_oauth.py`: authenticated connect/status/disconnect and state-bound OAuth callback.
 - `app/api/routes/goals.py`: create/list/get/pause/resume/cancel/run-now and run history.
 - `app/api/routes/health.py`: liveness and readiness.
 - Every goal route calls tenant-scoped services. No route accepts a user ID as proof of identity.
@@ -25,7 +25,7 @@ A separate worker process loads the same runtime and iterates trusted principals
 - `app/production/settings.py`: environment-backed configuration and required authentication secret validation.
 - `app/production/middleware.py`: request IDs, response security headers, Content-Length request-size bound, and process-local per-IP rate limit.
 - `app/production/logging.py`: best-effort redaction filter for common token/password/secret patterns.
-- `app/production/crypto.py`: Fernet authenticated-encryption helper for credential values.
+- `app/production/crypto.py`: Fernet authenticated-encryption helper for credential values.\n- `app/security/credential_manager.py`: SQLite-backed, per-user credential storage; token payloads are encrypted with Fernet and connections close deterministically.
 - `app/production/worker.py` and `worker_main.py`: supervised polling worker that establishes the authenticated identity for each account before scheduler execution.
 
 ### Deployment and automation
@@ -36,7 +36,7 @@ A separate worker process loads the same runtime and iterates trusted principals
 
 ## API routes
 
-- `POST /api/v1/auth/register`
+- `GET /api/v1/integrations/google/connect` (authenticated; returns Google authorization URL)\n- `GET /auth/google/callback` (Google redirect; validates one-time OAuth state)\n- `GET /api/v1/integrations/google/status` (authenticated)\n- `DELETE /api/v1/integrations/google/disconnect` (authenticated)\n- `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
 - `POST /api/v1/goals`
@@ -81,7 +81,7 @@ Run the worker in a second PowerShell window:
 - Rate limiting is in-memory and per process/IP; it is not distributed and is not a substitute for an edge/API gateway.
 - Request-size middleware checks Content-Length; an upstream reverse proxy must also enforce body-size and connection limits.
 - Logging redaction is best-effort. Application code must never log raw credentials, prompts containing secrets, or authorization headers.
-- The Fernet helper is not wired into Phase 5 CredentialManager. OAuth credentials remain in-memory and are not encrypted at rest.
+- Google OAuth credentials are stored per user in `PAAI_CREDENTIAL_DATABASE`, encrypted at rest with `PAAI_CREDENTIAL_ENCRYPTION_KEY`. Back up the key separately; losing it makes stored credentials unrecoverable. OAuth authorization state is single-use and expires after ten minutes; pending state is currently process-local, so keep the API as one process during OAuth callback.
 - Approval APIs and durable workflow/approval/audit storage are not implemented in this phase.
 - The default autonomy executor performs reasoning only. A trusted custom executor is required for external actions, and must use Phase 5 permissions and risk/approval controls.
 - Worker and API use SQLite and are intended for a single-host deployment. Multiple replicas need PostgreSQL and shared job leases/queue.
@@ -104,7 +104,7 @@ The Phase 8 test module includes credential encryption round-trip/wrong-key test
 - [x] Authenticated goal operations and tenant checks.
 - [x] Health endpoints and basic request controls.
 - [x] Worker process entry point with per-account identity scope.
-- [x] Fernet encryption utility.
+- [x] Fernet encryption utility wired into persistent per-user Google credential storage.\n- [x] Google OAuth connect/callback/status/disconnect API routes.
 - [x] Docker and Compose configuration.
 - [x] GitHub Actions CI workflow.
 - [x] Production runbook and configuration template.
