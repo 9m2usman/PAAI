@@ -185,6 +185,15 @@ class GoogleOAuthManager:
 
         return credentials
 
+    def exchange_code_from_state(self, code, state):
+        if not isinstance(state, str) or not state:
+            raise PermissionError("Invalid or expired OAuth state.")
+        state_data = self.pending_states.get(state)
+        if not state_data:
+            raise PermissionError("Invalid or expired OAuth state.")
+        user_id = state_data.get("user_id")
+        return self.exchange_code(user_id, code, state)
+
     def create_authorization_url_for_current_identity(self):
         from app.identity.context import current_identity
         return self.create_authorization_url(current_identity().user_id)
