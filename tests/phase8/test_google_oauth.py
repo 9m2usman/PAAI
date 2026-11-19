@@ -36,10 +36,16 @@ class GoogleOAuthTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.credentials.get_credentials("user-b", "gmail")
 
-    def test_state_is_single_use(self):
+    @patch.object(GoogleOAuthManager, "_send_token_request")
+    def test_state_is_single_use(self, token_request):
+        token_request.return_value = {
+            "access_token": "access-a", "refresh_token": "refresh-a",
+            "expires_in": 3600, "scope": "gmail calendar"
+        }
         url = self.manager.create_authorization_url("user-a")
         state = parse_qs(urlparse(url).query)["state"][0]
+        result = self.manager.exchange_code_from_state("code", state)
+        self.assertEqual(result["status"], "connected")
         with self.assertRaises(PermissionError):
             self.manager.exchange_code_from_state("code", state)
-        with self.assertRaises(PermissionError):
-            self.manager.exchange_code_from_state("code", state)
+        token_request.assert_called_once()

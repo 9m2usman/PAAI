@@ -38,10 +38,12 @@ class WorkflowManager:
             (workflow["workflow_id"], workflow["user_id"], encoded, workflow["status"]))
 
     def _load(self, user_id, workflow_id):
-        row = self.db.execute("SELECT state_json FROM workflows WHERE workflow_id=? AND user_id=?",
-                              (workflow_id, user_id)).fetchone()
+        row = self.db.execute("SELECT user_id,state_json FROM workflows WHERE workflow_id=?",
+                              (workflow_id,)).fetchone()
         if row is None:
             raise ValueError("Workflow not found.")
+        if row["user_id"] != user_id:
+            raise PermissionError("Workflow belongs to another user.")
         return json.loads(row["state_json"])
 
     def run(self, user_id, steps, origin_goal_id=None, origin_run_id=None):

@@ -14,6 +14,7 @@ def create_goal(payload: GoalCreateRequest, request: Request, identity=Depends(a
             run_at=payload.run_at,
             max_steps=payload.max_steps,
             max_runtime_seconds=payload.max_runtime_seconds,
+            event_type=payload.event_type,
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None

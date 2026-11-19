@@ -89,9 +89,12 @@ class IntegrationWorkflowAgent:
         plan = self._create_plan(user_request)
         if not plan["steps"]:
             return {"status": "no_actions", "goal": plan["goal"], "workflow": None}
-        workflow = self.workflow_manager.run(
-            authenticated_user_id, plan["steps"],
-            origin_goal_id=origin_goal_id, origin_run_id=origin_run_id)
+        if origin_goal_id is None and origin_run_id is None:
+            workflow = self.workflow_manager.run(authenticated_user_id, plan["steps"])
+        else:
+            workflow = self.workflow_manager.run(
+                authenticated_user_id, plan["steps"],
+                origin_goal_id=origin_goal_id, origin_run_id=origin_run_id)
         return {"status": workflow["status"], "goal": plan["goal"], "workflow": workflow}
 
     def resume(self, authenticated_user_id, workflow_id, approval_id):
