@@ -129,9 +129,21 @@ class GoalRepository:
                     WHERE owner_id=? AND event_type=? AND trigger_type='event' AND status='active'""",
                     (owner, event_type)).fetchall()
                 for row in goals:
+                    queued = db.execute(
+                        "SELECT pending_event_json FROM autonomy_goals WHERE goal_id=? AND owner_id=?",
+                        (row["goal_id"], owner)
+                    ).fetchone()["pending_event_json"]
+                    pending = json.loads(queued) if queued else []
+                    pending.append({
+                        "event_id": event_id,
+                        "event_type": event_type,
+                        "payload": payload,
+                        "occurred_at": occurred_at
+                    })
                     db.execute("""UPDATE autonomy_goals SET next_run_at=?,pending_event_json=?,updated_at=?
                         WHERE goal_id=? AND owner_id=? AND status='active'""",
-                        (now, payload_json, now, row["goal_id"], owner))
+                        (now, json.dumps(pending, separators=(",", ":"), sort_keys=True),
+                         now, row["goal_id"], owner))
                 db.execute("""INSERT INTO autonomy_events
                     (event_id,owner_id,event_type,payload_json,occurred_at,accepted_at,matched_goals)
                     VALUES(?,?,?,?,?,?,?)""",
@@ -166,7 +178,12 @@ class GoalRepository:
                             (run_id,goal_id,owner_id,status,started_at) VALUES(?,?,?,?,?)""",
                             (run_id, row["goal_id"], owner, "running", now))
                         item = dict(row)
-                        item["event_payload"] = json.loads(row["pending_event_json"]) if row["pending_event_json"] else None
+                        pending = json.loads(row["pending_event_json"]) if row["pending_event_json"] else []
+                        item["event_payload"] = pending.pop(0) if pending else None
+                        remaining = json.dumps(pending, separators=(",", ":"), sort_keys=True) if pending else None
+                        db.execute("""UPDATE autonomy_goals SET pending_event_json=?
+                            WHERE goal_id=? AND owner_id=?""",
+                            (remaining, row["goal_id"], owner))
                         claimed.append({"goal": item, "run_id": run_id})
                 db.commit()
             except Exception:
@@ -198,11 +215,15 @@ class GoalRepository:
                 (status, now, result, error, run_id, owner))
             next_status = status
             next_run = None
+            pending_events = json.loads(goal["pending_event_json"]) if goal["pending_event_json"] else []
             if status == "completed" and goal["interval_seconds"]:
                 next_status = "active"
                 next_run = (now_dt + timedelta(seconds=goal["interval_seconds"])).isoformat()
+            elif status == "completed" and goal["trigger_type"] == "event" and pending_events:
+                next_status = "active"
+                next_run = now
             db.execute("""UPDATE autonomy_goals SET status=?,next_run_at=?,last_result=?,
-                pending_event_json=NULL,updated_at=? WHERE goal_id=? AND owner_id=?""",
+                updated_at=? WHERE goal_id=? AND owner_id=?""",
                 (next_status, next_run, result, now, goal["goal_id"], owner))
         return {"run_id": run_id, "goal_id": run["goal_id"], "status": status, "finished_at": now}
 
