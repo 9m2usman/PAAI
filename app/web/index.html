@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <title>PAAI Control Center</title>
+  <link rel="stylesheet" href="/dashboard/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">P</span><div><strong>PAAI</strong><small>Control Center</small></div></div>
+      <div class="sidebar-label">WORKSPACE</div>
+      <nav>
+        <a class="nav-link active" href="#overview" data-view="overview"><span>◫</span> Overview</a>
+        <a class="nav-link" href="#goals" data-view="goals"><span>◎</span> Autonomous goals</a>
+        <a class="nav-link" href="#workflows" data-view="workflows"><span>⌘</span> Workflows</a>
+        <a class="nav-link" href="#approvals" data-view="approvals"><span>✓</span> Approvals <i id="approval-count">0</i></a>
+        <a class="nav-link" href="#integrations" data-view="integrations"><span>↔</span> Integrations</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="connection"><span class="status-dot" id="api-dot"></span><span id="api-label">Checking API…</span></div>
+        <button class="button button-quiet button-full" id="logout-button" hidden>Sign out</button>
+        <small class="version">Local development interface</small>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div><div class="eyebrow">PERSONAL AUTONOMOUS AGENT INFRASTRUCTURE</div><h1 id="page-title">Overview</h1></div>
+        <div class="topbar-right"><span class="user-pill" id="user-email">Not signed in</span><button class="button button-secondary button-small" id="refresh-button">Refresh</button></div>
+      </header>
+
+      <section id="auth-view" class="auth-layout">
+        <div class="auth-intro">
+          <div class="eyebrow">YOUR LOCAL AGENT WORKSPACE</div>
+          <h2>Give your goals a place to run.</h2>
+          <p>Sign in to manage autonomous goals, connect integrations, grant specific permissions, and review actions that need your approval.</p>
+          <div class="auth-points"><span>● Your data stays in your configured local databases</span><span>● External actions remain permission-controlled</span><span>● Sensitive actions require your approval</span></div>
+        </div>
+        <div class="panel auth-panel">
+          <div class="tab-row"><button class="auth-tab selected" data-auth-mode="login">Sign in</button><button class="auth-tab" data-auth-mode="register">Create account</button></div>
+          <form id="auth-form">
+            <label for="auth-email">Email address</label><input id="auth-email" type="email" autocomplete="email" required placeholder="you@example.com">
+            <label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="current-password" required minlength="12" placeholder="At least 12 characters">
+            <button class="button button-primary button-full" id="auth-submit" type="submit">Sign in</button>
+          </form>
+          <p class="muted tiny">Create an account on this PAAI instance, or sign in with an existing account.</p>
+        </div>
+      </section>
+
+      <section id="workspace" hidden>
+        <section class="view active" id="view-overview">
+          <div class="welcome-row"><div><h2>Your agent at a glance</h2><p class="muted">A live view of your goals, integrations, and decisions.</p></div><span class="live-tag"><span class="status-dot"></span> LOCAL INSTANCE</span></div>
+          <div class="stat-grid">
+            <article class="stat-card"><span class="stat-label">AUTONOMOUS GOALS</span><strong id="stat-goals">—</strong><small>Saved to your account</small></article>
+            <article class="stat-card"><span class="stat-label">PENDING APPROVALS</span><strong id="stat-approvals">—</strong><small>Waiting for your decision</small></article>
+            <article class="stat-card"><span class="stat-label">GOOGLE CONNECTION</span><strong id="stat-google">—</strong><small>Gmail / Calendar credentials</small></article>
+          </div>
+          <div class="content-grid">
+            <article class="panel"><div class="panel-heading"><div><h3>Quick start</h3><p class="muted">Try a safe, read-only goal first.</p></div></div>
+              <div class="quick-step"><span>01</span><div><strong>Connect Google</strong><p>Authorize your Google account from Integrations.</p></div></div>
+              <div class="quick-step"><span>02</span><div><strong>Grant one specific permission</strong><p>Start with Gmail → list emails. Avoid broad access.</p></div></div>
+              <div class="quick-step"><span>03</span><div><strong>Create and run a goal</strong><p>Ask PAAI to review recent emails and identify messages needing a reply.</p></div></div>
+              <a class="text-link" href="#integrations" data-view="integrations">Set up integrations →</a>
+            </article>
+            <article class="panel"><div class="panel-heading"><div><h3>Safety boundary</h3><p class="muted">What PAAI can and cannot do.</p></div></div>
+              <div class="safety-item"><span class="safety-icon green">✓</span><div><strong>Explicit permissions</strong><p>Each integration action must be granted to your account.</p></div></div>
+              <div class="safety-item"><span class="safety-icon amber">!</span><div><strong>Human approval</strong><p>High-risk actions, such as sending email, wait for your approval.</p></div></div>
+              <div class="safety-item"><span class="safety-icon blue">↻</span><div><strong>Controlled execution</strong><p>Interrupted external actions are not automatically replayed.</p></div></div>
+            </article>
+          </div>
+          <article class="panel"><div class="panel-heading"><div><h3>Recent goals</h3><p class="muted">Your latest autonomous tasks.</p></div><a class="text-link" href="#goals" data-view="goals">View all →</a></div><div id="overview-goals" class="empty-state">No goals loaded yet.</div></article>
+        </section>
+
+        <section class="view" id="view-goals">
+          <div class="section-intro"><div><h2>Autonomous goals</h2><p class="muted">Create a goal, then run it when you're ready. Runs are saved to your account.</p></div></div>
+          <article class="panel">
+            <div class="panel-heading"><div><h3>Create a goal</h3><p class="muted">Start with a small, specific task.</p></div></div>
+            <form id="goal-form" class="form-grid">
+              <div class="field full"><label for="goal-description">What should PAAI do?</label><textarea id="goal-description" rows="3" maxlength="4000" required placeholder="Review my recent emails and identify messages that need a response."></textarea></div>
+              <div class="field"><label for="goal-steps">Maximum steps</label><select id="goal-steps"><option>3</option><option selected>5</option><option>8</option></select></div>
+              <div class="field"><label for="goal-runtime">Runtime limit (seconds)</label><select id="goal-runtime"><option>60</option><option selected>120</option><option>180</option><option>300</option></select></div>
+              <div class="field full"><button class="button button-primary" type="submit">Create goal</button></div>
+            </form>
+          </article>
+          <article class="panel"><div class="panel-heading"><div><h3>Your goals</h3><p class="muted">Run, pause, resume, or cancel saved goals.</p></div><button class="button button-secondary button-small" id="goals-refresh">Reload</button></div><div id="goals-list" class="stack empty-state">Loading goals…</div></article>
+          <article class="panel" id="runs-panel" hidden><div class="panel-heading"><div><h3>Goal run history</h3><p class="muted" id="runs-subtitle"></p></div></div><pre class="json-output" id="runs-output"></pre></article>
+        </section>
+
+        <section class="view" id="view-workflows">
+          <div class="section-intro"><div><h2>Manual workflows</h2><p class="muted">Ask the workflow agent to plan an integration task. Review any approval request before it continues.</p></div></div>
+          <article class="panel">
+            <div class="callout warning"><strong>External actions are real.</strong> Only request actions you intend to perform. PAAI checks permissions and risk before executing each step.</div>
+            <form id="workflow-form">
+              <label for="workflow-request">Describe the workflow</label>
+              <textarea id="workflow-request" rows="4" required maxlength="4000" placeholder="List my five most recent emails and summarize their subjects."></textarea>
+              <div class="form-actions"><button class="button button-primary" type="submit">Plan and run workflow</button></div>
+            </form>
+          </article>
+          <article class="panel"><div class="panel-heading"><div><h3>Workflow result</h3><p class="muted">Latest manual workflow response.</p></div></div><pre id="workflow-output" class="json-output">No workflow started yet.</pre></article>
+        </section>
+
+        <section class="view" id="view-approvals">
+          <div class="section-intro"><div><h2>Approval center</h2><p class="muted">Inspect the exact action and parameters before approving or rejecting it.</p></div><button class="button button-secondary button-small" id="approvals-refresh">Reload</button></div>
+          <div class="callout warning">Approving an action may cause a real external side effect, such as sending an email or changing a calendar event. Check the details carefully.</div>
+          <div id="approvals-list" class="stack empty-state">No pending approvals loaded.</div>
+        </section>
+
+        <section class="view" id="view-integrations">
+          <div class="section-intro"><div><h2>Integrations and permissions</h2><p class="muted">Connect Google, then grant only the individual actions PAAI needs.</p></div></div>
+          <article class="panel integration-panel">
+            <div class="integration-brand"><span class="google-mark">G</span><div><h3>Google account</h3><p class="muted">Gmail and Google Calendar</p></div><span class="status-badge" id="google-status">Not connected</span></div>
+            <p class="muted">OAuth credentials configured in your local .env file are not the same as connecting your Google account. Use the button below to authorize this PAAI user.</p>
+            <div class="form-actions"><button class="button button-primary" id="google-connect">Connect Google</button><button class="button button-secondary" id="google-refresh">Check connection</button><button class="button button-quiet" id="google-disconnect">Disconnect</button></div>
+          </article>
+          <article class="panel">
+            <div class="panel-heading"><div><h3>Grant a specific permission</h3><p class="muted">Permissions are separate for each PAAI user.</p></div></div>
+            <form id="permission-form" class="form-grid">
+              <div class="field"><label for="permission-integration">Integration</label><select id="permission-integration"><option value="gmail">Gmail</option><option value="calendar">Google Calendar</option></select></div>
+              <div class="field"><label for="permission-action">Action</label><select id="permission-action"><option value="list_emails">List emails (read-only)</option><option value="read_email">Read email (read-only)</option><option value="create_draft">Create draft</option><option value="send_email">Send email (high risk)</option></select></div>
+              <div class="field full"><button class="button button-primary" type="submit">Grant selected permission</button></div>
+            </form>
+            <div class="callout subtle">Granting permission does not bypass approval rules. High-risk actions such as sending email still require human approval.</div>
+          </article>
+          <article class="panel"><div class="panel-heading"><div><h3>Current permissions</h3><p class="muted">Revoke access at any time.</p></div><button class="button button-secondary button-small" id="permissions-refresh">Reload</button></div><div id="permissions-list" class="stack empty-state">No permissions loaded.</div></article>
+        </section>
+      </section>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <footer class="footer">PAAI · Local control interface · Keep your .env file private</footer>
+    </main>
+  </div>
+  <script src="/dashboard/app.js" defer></script>
+</body>
+</html>
