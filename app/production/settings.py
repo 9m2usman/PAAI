@@ -17,6 +17,11 @@ class Settings:
     requests_per_minute: int
     token_lifetime_seconds: int
     docs_enabled: bool
+    google_client_id: str
+    google_client_secret: str
+    google_redirect_uri: str
+    credential_encryption_key: str
+    credential_database: str
 
 def get_settings():
     load_dotenv()
@@ -45,4 +50,9 @@ def get_settings():
         requests_per_minute=int(os.getenv("PAAI_REQUESTS_PER_MINUTE", "120")),
         token_lifetime_seconds=int(os.getenv("PAAI_TOKEN_LIFETIME_SECONDS", "3600")),
         docs_enabled=os.getenv("PAAI_ENABLE_DOCS", "false").lower() == "true",
+        google_client_id=os.getenv("GOOGLE_CLIENT_ID", "").strip(),
+        google_client_secret=os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
+        google_redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "").strip(),
+        credential_encryption_key=os.getenv("PAAI_CREDENTIAL_ENCRYPTION_KEY", "").strip(),
+        credential_database=os.getenv("PAAI_CREDENTIAL_DATABASE", str(data_dir / "paai_credentials.db")),
     )
