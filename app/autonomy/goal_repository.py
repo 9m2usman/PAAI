@@ -22,12 +22,14 @@ class GoalRepository:
                 status TEXT NOT NULL, trigger_type TEXT NOT NULL, interval_seconds INTEGER,
                 next_run_at TEXT, max_steps INTEGER NOT NULL, max_runtime_seconds INTEGER NOT NULL,
                 created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_result TEXT,
-                event_type TEXT, pending_event_json TEXT)""")
+                event_type TEXT, pending_event_json TEXT, lease_expires_at TEXT)""")
             columns = {row["name"] for row in db.execute("PRAGMA table_info(autonomy_goals)")}
             if "event_type" not in columns:
                 db.execute("ALTER TABLE autonomy_goals ADD COLUMN event_type TEXT")
             if "pending_event_json" not in columns:
                 db.execute("ALTER TABLE autonomy_goals ADD COLUMN pending_event_json TEXT")
+            if "lease_expires_at" not in columns:
+                db.execute("ALTER TABLE autonomy_goals ADD COLUMN lease_expires_at TEXT")
             db.execute("CREATE INDEX IF NOT EXISTS idx_autonomy_due ON autonomy_goals(status,next_run_at)")
             db.execute("""CREATE TABLE IF NOT EXISTS autonomy_runs (
                 run_id TEXT PRIMARY KEY, goal_id TEXT NOT NULL, owner_id TEXT NOT NULL,
@@ -169,14 +171,28 @@ class GoalRepository:
             db.row_factory = sqlite3.Row
             try:
                 db.execute("BEGIN IMMEDIATE")
+                stale = db.execute("""SELECT goal_id FROM autonomy_goals
+                    WHERE owner_id=? AND status='running' AND lease_expires_at IS NOT NULL
+                    AND lease_expires_at<=?""", (owner, now)).fetchall()
+                for stale_goal in stale:
+                    db.execute("""UPDATE autonomy_runs SET status='failed',finished_at=?,
+                        error='Worker lease expired before completion.'
+                        WHERE goal_id=? AND owner_id=? AND status='running'""",
+                        (now, stale_goal["goal_id"], owner))
+                    db.execute("""UPDATE autonomy_goals SET status='active',next_run_at=?,
+                        lease_expires_at=NULL,updated_at=? WHERE goal_id=? AND owner_id=?
+                        AND status='running'""",
+                        (now, now, stale_goal["goal_id"], owner))
                 rows = db.execute("""SELECT * FROM autonomy_goals
                     WHERE owner_id=? AND status='active' AND next_run_at IS NOT NULL AND next_run_at<=?
                     ORDER BY next_run_at LIMIT ?""", (owner, now, limit)).fetchall()
                 for row in rows:
                     run_id = str(uuid.uuid4())
-                    changed = db.execute("""UPDATE autonomy_goals SET status='running',updated_at=?
+                    lease_expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+                    changed = db.execute("""UPDATE autonomy_goals SET status='running',
+                        lease_expires_at=?,updated_at=?
                         WHERE goal_id=? AND owner_id=? AND status='active'""",
-                        (now, row["goal_id"], owner)).rowcount
+                        (lease_expires_at, now, row["goal_id"], owner)).rowcount
                     if changed:
                         db.execute("""INSERT INTO autonomy_runs
                             (run_id,goal_id,owner_id,status,started_at) VALUES(?,?,?,?,?)""",
@@ -230,7 +246,7 @@ class GoalRepository:
                 next_status = "active"
                 next_run = now
             db.execute("""UPDATE autonomy_goals SET status=?,next_run_at=?,last_result=?,
-                updated_at=? WHERE goal_id=? AND owner_id=?""",
+                lease_expires_at=NULL,updated_at=? WHERE goal_id=? AND owner_id=?""",
                 (next_status, next_run, result, now, goal["goal_id"], owner))
         return {"run_id": run_id, "goal_id": run["goal_id"], "status": status, "finished_at": now}
 
