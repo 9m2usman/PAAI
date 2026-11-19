@@ -40,7 +40,7 @@ Move PAAI from request/response interaction toward persistent, goal-driven execu
 - The default executor has no external tools; external side effects require an explicitly injected trusted executor.
 - The existing Phase 5 deterministic risk evaluator and approval manager remain the required safety boundary for integrations.
 - Run history stores bounded error text, not credential values.
-- Due-goal claims use a database transaction to reduce duplicate runs.
+- Due-goal claims use a database transaction to reduce duplicate runs. Each running goal receives a ten-minute lease; the next worker tick marks an abandoned run failed and re-queues its goal after a process crash.
 - SQLite is single-host storage; distributed worker leases and cross-host scheduling are not provided.
 - The runtime budget is checked after the executor returns; a custom executor must enforce a hard timeout itself.
 
@@ -68,7 +68,7 @@ Run all tests from the project root:
 - [x] Tenant-scoped goal and run persistence.
 - [x] Manual and fixed-interval scheduled goals.
 - [x] Pause, resume, cancel, and run-now operations.
-- [x] Atomic due-goal claim.
+- [x] Atomic due-goal claim and stale-worker lease recovery.
 - [x] Deterministic execution limits and safe reasoning-only default executor.
 - [x] Run outcome and history persistence.
 - [x] Event type and payload validation.
