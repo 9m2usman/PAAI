@@ -94,7 +94,12 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(other_tenant_event.json()["matched_goals"], 0)
 
                 runtime.phase5_runtime["integration_registry"].register(FakeApprovalConnector())
-                runtime.permissions.grant_permission(first.json()["user"]["user_id"], "demo", ["create"])
+                granted = client.post(
+                    "/api/v1/permissions",
+                    headers={"Authorization": "Bearer " + token_a},
+                    json={"integration": "demo", "action": "create"},
+                )
+                self.assertEqual(granted.status_code, 201)
                 with patch(
                     "app.agents.integration_workflow_agent.generate_response",
                     return_value='{"goal":"Create a demo item","steps":[{"integration":"demo","action":"create","parameters":{"name":"approved-item"}}]}',
