@@ -13,21 +13,17 @@ from app.autonomy.triggers import TriggerRegistry
 from app.autonomy.engine import AutonomyEngine
 from app.autonomy.scheduler import AutonomyScheduler
 from app.autonomy.agent_executor import ReasoningGoalExecutor
+from app.autonomy.approval_bridge import AutonomyApprovalBridge
 from app.integrations.google_oauth import GoogleOAuthManager
 from app.integrations.register_integrations import create_phase5_runtime
 
 
 class MultiUserRuntime:
     def __init__(
-        self,
-        auth_database="data/paai_auth.db",
-        token_secret=None,
-        token_lifetime_seconds=3600,
-        memory_database=None,
-        autonomy_database="data/paai_autonomy.db",
-        autonomy_executor=None,
-        google_oauth_config=None,
-        credential_database=None,
+        self, auth_database="data/paai_auth.db", token_secret=None,
+        token_lifetime_seconds=3600, memory_database=None,
+        autonomy_database="data/paai_autonomy.db", autonomy_executor=None,
+        google_oauth_config=None, credential_database=None,
         credential_encryption_key=None,
     ):
         self.auth_repository = AuthRepository(auth_database)
@@ -36,36 +32,30 @@ class MultiUserRuntime:
         self.profiles = ProfileService(auth_database)
         self.memory = AuthenticatedMemoryService(memory_database if memory_database is not None else None)
         self.credentials = CredentialManager(
-            database_path=credential_database,
-            encryption_key=credential_encryption_key,
-        )
+            database_path=credential_database, encryption_key=credential_encryption_key)
         self.google_oauth = None
         if google_oauth_config:
             self.google_oauth = GoogleOAuthManager(
                 client_id=google_oauth_config["client_id"],
                 client_secret=google_oauth_config["client_secret"],
                 redirect_uri=google_oauth_config["redirect_uri"],
-                credential_manager=self.credentials,
-            )
+                credential_manager=self.credentials)
         self.permissions = PermissionManager()
         self.phase5_runtime = create_phase5_runtime(
-            google_oauth_config={},
-            credential_manager=self.credentials,
-            permission_manager=self.permissions,
-            oauth_manager=self.google_oauth,
-        )
+            google_oauth_config={}, credential_manager=self.credentials,
+            permission_manager=self.permissions, oauth_manager=self.google_oauth,
+            state_database=autonomy_database)
         self.approvals = self.phase5_runtime["approval_manager"]
         self.workflow_manager = self.phase5_runtime["workflow_manager"]
         self.workflow_agent = self.phase5_runtime["workflow_agent"]
         self.autonomy_policy = AutonomyPolicy()
         self.goal_repository = GoalRepository(autonomy_database)
+        self.approval_bridge = AutonomyApprovalBridge(autonomy_database)
         self.triggers = TriggerRegistry(max_payload_bytes=self.autonomy_policy.max_event_payload_bytes)
         self.goals = GoalService(self.goal_repository, self.autonomy_policy, self.triggers)
         self.autonomy_engine = AutonomyEngine(
-            self.goal_repository,
-            autonomy_executor or ReasoningGoalExecutor(),
-            self.autonomy_policy,
-        )
+            self.goal_repository, autonomy_executor or ReasoningGoalExecutor(),
+            self.autonomy_policy, approval_bridge=self.approval_bridge)
         self.scheduler = AutonomyScheduler(self.autonomy_engine)
 
     def authenticate(self, token):
