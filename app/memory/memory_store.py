@@ -87,7 +87,7 @@ def get_user_profile(user_id, db_path=DATABASE_PATH):
     validate_user_id(user_id)
     initialize_memory_db(db_path)
 
-    with sqlite3.connect(db_path) as connection:
+    with database_connection(db_path) as connection:
         result = connection.execute("""
             SELECT profile_data
             FROM user_profiles
@@ -120,7 +120,7 @@ def save_memory(user_id, memory_key, memory_value,
 
     updated_at = datetime.now(timezone.utc).isoformat()
 
-    with sqlite3.connect(db_path) as connection:
+    with database_connection(db_path) as connection:
         connection.execute("""
             INSERT INTO user_memories
             (user_id, memory_key, memory_value, category, updated_at)
@@ -145,7 +145,7 @@ def get_memory(user_id, memory_key, db_path=DATABASE_PATH):
     validate_user_id(user_id)
     initialize_memory_db(db_path)
 
-    with sqlite3.connect(db_path) as connection:
+    with database_connection(db_path) as connection:
         result = connection.execute("""
             SELECT memory_key, memory_value, category, updated_at
             FROM user_memories
@@ -169,7 +169,7 @@ def get_user_memories(user_id, category=None, db_path=DATABASE_PATH):
     validate_user_id(user_id)
     initialize_memory_db(db_path)
 
-    with sqlite3.connect(db_path) as connection:
+    with database_connection(db_path) as connection:
 
         if category is None:
             results = connection.execute("""
@@ -204,7 +204,7 @@ def delete_memory(user_id, memory_key, db_path=DATABASE_PATH):
     validate_user_id(user_id)
     initialize_memory_db(db_path)
 
-    with sqlite3.connect(db_path) as connection:
+    with database_connection(db_path) as connection:
         cursor = connection.execute("""
             DELETE FROM user_memories
             WHERE user_id = ? AND memory_key = ?
@@ -234,7 +234,7 @@ def update_memory(
 
     updated_at = datetime.now(timezone.utc).isoformat()
 
-    with sqlite3.connect(db_path) as connection:
+    with database_connection(db_path) as connection:
 
         if category is None:
             cursor = connection.execute("""
@@ -270,7 +270,7 @@ def delete_all_user_memories(user_id, db_path=DATABASE_PATH):
     validate_user_id(user_id)
     initialize_memory_db(db_path)
 
-    with sqlite3.connect(db_path) as connection:
+    with database_connection(db_path) as connection:
         cursor = connection.execute("""
             DELETE FROM user_memories
             WHERE user_id = ?
