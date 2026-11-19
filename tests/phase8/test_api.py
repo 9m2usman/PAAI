@@ -54,5 +54,32 @@ class ApiTests(unittest.TestCase):
                     headers={"Authorization": "Bearer " + token_b},
                 )
                 self.assertEqual(denied.status_code, 404)
+
+                event_goal = client.post(
+                    "/api/v1/goals",
+                    headers={"Authorization": "Bearer " + token_a},
+                    json={"description": "Process incoming reports", "event_type": "report.ready"},
+                )
+                self.assertEqual(event_goal.status_code, 201)
+                event_headers = {"Authorization": "Bearer " + token_a}
+                event = client.post(
+                    "/api/v1/events",
+                    headers=event_headers,
+                    json={"event_id": "report-001", "event_type": "report.ready", "payload": {"report_id": "r-1"}},
+                )
+                self.assertEqual(event.status_code, 202)
+                self.assertEqual(event.json()["matched_goals"], 1)
+                duplicate = client.post(
+                    "/api/v1/events",
+                    headers=event_headers,
+                    json={"event_id": "report-001", "event_type": "report.ready", "payload": {"report_id": "r-1"}},
+                )
+                self.assertTrue(duplicate.json()["duplicate"])
+                other_tenant_event = client.post(
+                    "/api/v1/events",
+                    headers={"Authorization": "Bearer " + token_b},
+                    json={"event_id": "report-001", "event_type": "report.ready", "payload": {"report_id": "other"}},
+                )
+                self.assertEqual(other_tenant_event.json()["matched_goals"], 0)
                 unauthenticated = client.get("/api/v1/goals")
                 self.assertEqual(unauthenticated.status_code, 401)
