@@ -14,6 +14,7 @@ from app.autonomy.engine import AutonomyEngine
 from app.autonomy.scheduler import AutonomyScheduler
 from app.autonomy.agent_executor import ReasoningGoalExecutor
 from app.integrations.google_oauth import GoogleOAuthManager
+from app.integrations.register_integrations import create_phase5_runtime
 
 
 class MultiUserRuntime:
@@ -47,6 +48,15 @@ class MultiUserRuntime:
                 credential_manager=self.credentials,
             )
         self.permissions = PermissionManager()
+        self.phase5_runtime = create_phase5_runtime(
+            google_oauth_config={},
+            credential_manager=self.credentials,
+            permission_manager=self.permissions,
+            oauth_manager=self.google_oauth,
+        )
+        self.approvals = self.phase5_runtime["approval_manager"]
+        self.workflow_manager = self.phase5_runtime["workflow_manager"]
+        self.workflow_agent = self.phase5_runtime["workflow_agent"]
         self.autonomy_policy = AutonomyPolicy()
         self.goal_repository = GoalRepository(autonomy_database)
         self.triggers = TriggerRegistry(max_payload_bytes=self.autonomy_policy.max_event_payload_bytes)
