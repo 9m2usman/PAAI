@@ -67,6 +67,24 @@ class Phase7Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.triggers.validate_event("report.ready", {"large": "x" * 20000})
 
+
+    def test_expired_worker_lease_recovers_abandoned_run(self):
+        with identity_scope(self.a):
+            goal = self.service.create("Recover after worker crash")
+            self.service.run_now(goal["goal_id"])
+            first_claim = self.repo.claim_due()[0]
+            with self.repo._connect() as db:
+                db.execute(
+                    "UPDATE autonomy_goals SET lease_expires_at=? WHERE goal_id=?",
+                    ("2000-01-01T00:00:00+00:00", goal["goal_id"]),
+                )
+            second_claim = self.repo.claim_due()[0]
+            self.assertNotEqual(first_claim["run_id"], second_claim["run_id"])
+            runs = self.repo.list_runs(goal["goal_id"])
+            self.assertEqual(runs[0]["status"], "running")
+            self.assertEqual(runs[1]["status"], "failed")
+            self.assertIn("lease expired", runs[1]["error"])
+
     def test_event_goal_dispatches_persisted_payload(self):
         with identity_scope(self.a):
             goal = self.service.create(
