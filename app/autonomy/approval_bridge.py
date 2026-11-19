@@ -59,23 +59,25 @@ class AutonomyApprovalBridge:
                     continue
                 workflow_status = row["status"]
                 if workflow_status == "awaiting_approval":
-                    final_status = "awaiting_approval"
+                    run_status = "awaiting_approval"
+                    goal_status = "awaiting_approval"
                     link_status = "pending"
                     run_result = json.dumps({"workflow_id": workflow_id})
                     error = None
                     goal_next = None
                 else:
-                    final_status = "failed" if workflow_status in {"failed", "rejected", "execution_uncertain"} else "completed"
+                    run_status = "failed" if workflow_status in {"failed", "rejected", "execution_uncertain"} else "completed"
+                    goal_status = run_status
                     link_status = workflow_status
                     run_result = json.dumps(state, default=str)
                     error = "Workflow execution outcome is uncertain; automatic replay is blocked." if workflow_status == "execution_uncertain" else ("Workflow rejected by user." if workflow_status == "rejected" else None)
                     goal_next = None
-                    if final_status == "completed" and goal["interval_seconds"]:
-                        final_status = "active"
+                    if run_status == "completed" and goal["interval_seconds"]:
+                        goal_status = "active"
                         goal_next = (datetime.now(timezone.utc) + timedelta(seconds=goal["interval_seconds"])).isoformat()
-                    elif final_status == "completed" and goal["trigger_type"] == "event" and goal["pending_event_json"]:
+                    elif run_status == "completed" and goal["trigger_type"] == "event" and goal["pending_event_json"]:
                         if json.loads(goal["pending_event_json"]):
-                            final_status = "active"
+                            goal_status = "active"
                             goal_next = now
                 db.execute("""INSERT INTO autonomy_approval_links
                     (workflow_id,run_id,goal_id,owner_id,status,created_at,updated_at)
@@ -83,11 +85,11 @@ class AutonomyApprovalBridge:
                     (workflow_id, run_id, goal_id, owner, link_status, now, now))
                 db.execute("""UPDATE autonomy_runs SET status=?,finished_at=?,result=?,error=?
                     WHERE run_id=? AND owner_id=? AND status='running'""",
-                    (final_status, now, run_result, error, run_id, owner))
+                    (run_status, now, run_result, error, run_id, owner))
                 db.execute("""UPDATE autonomy_goals SET status=?,next_run_at=?,last_result=?,lease_expires_at=NULL,updated_at=?
                     WHERE goal_id=? AND owner_id=? AND status='running'""",
-                    (final_status, goal_next, run_result, now, goal_id, owner))
-                recovered.append({"workflow_id": workflow_id, "run_id": run_id, "status": final_status})
+                    (goal_status, goal_next, run_result, now, goal_id, owner))
+                recovered.append({"workflow_id": workflow_id, "run_id": run_id, "status": run_status, "goal_status": goal_status})
             db.commit()
         return recovered
 
@@ -121,6 +123,7 @@ class AutonomyApprovalBridge:
         owner = current_identity().user_id
         if workflow_status not in {"completed", "rejected", "failed"}:
             return None
+        final_status = "completed" if workflow_status == "completed" else "failed"
         now_dt = datetime.now(timezone.utc)
         now = now_dt.isoformat()
         with self._connect() as db:
