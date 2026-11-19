@@ -53,3 +53,8 @@ class WorkflowCreateRequest(BaseModel):
 
 class ApprovalDecisionRequest(BaseModel):
     approval_id: str = Field(min_length=1, max_length=128)
+
+
+class PermissionGrantRequest(BaseModel):
+    integration: str = Field(min_length=1, max_length=64)
+    action: str = Field(min_length=1, max_length=64)
