@@ -59,6 +59,8 @@ class GoalService:
         return self.repository.request_run(goal_id)
 
     def publish_event(self, event_id, event_type, payload):
+        if not isinstance(event_id, str) or not event_id.strip() or len(event_id) > 128:
+            raise ValueError("Event ID must be a non-empty string of at most 128 characters.")
         if self.trigger_registry is None:
             raise ValueError("Event triggers are unavailable.")
         event = self.trigger_registry.validate_event(event_type, payload)
