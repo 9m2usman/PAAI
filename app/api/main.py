@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import auth, goals, health, events
 from app.api.routes import google_oauth, workflows, permissions
@@ -75,6 +78,13 @@ def create_app(runtime=None, settings=None):
     app.include_router(google_oauth.router)
     app.add_api_route("/auth/google/callback", google_oauth.google_callback,
                       methods=["GET"], include_in_schema=False)
+
+    @app.get("/", include_in_schema=False)
+    def dashboard_home():
+        return RedirectResponse(url="/dashboard/")
+
+    web_directory = Path(__file__).resolve().parent.parent / "web"
+    app.mount("/dashboard", StaticFiles(directory=str(web_directory), html=True), name="dashboard")
     return app
 
 
