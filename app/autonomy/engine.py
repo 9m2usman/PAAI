@@ -1,6 +1,7 @@
 import time
 from app.autonomy.policy import AutonomyPolicy
 
+
 class AutonomyEngine:
     def __init__(self, repository, executor, policy=None):
         self.repository = repository
@@ -20,12 +21,18 @@ class AutonomyEngine:
                     "run_id": run_id,
                     "max_steps": min(goal["max_steps"], self.policy.max_steps),
                     "max_runtime_seconds": min(goal["max_runtime_seconds"], self.policy.max_runtime_seconds),
+                    "trigger_type": goal["trigger_type"],
+                    "event_type": goal.get("event_type"),
+                    "event_payload": goal.get("event_payload"),
                 })
                 if result is None or result == "":
                     raise RuntimeError("Autonomy executor returned an empty result.")
                 elapsed = time.monotonic() - started
                 if elapsed > min(goal["max_runtime_seconds"], self.policy.max_runtime_seconds):
-                    outcome = self.repository.finish_run(run_id, "budget_exhausted", error="Execution time budget exceeded.")
+                    outcome = self.repository.finish_run(
+                        run_id, "budget_exhausted",
+                        error="Execution time budget exceeded."
+                    )
                 elif isinstance(result, dict) and result.get("status") == "awaiting_approval":
                     outcome = self.repository.finish_run(run_id, "awaiting_approval", result=str(result))
                 elif isinstance(result, dict) and result.get("status") == "budget_exhausted":
@@ -33,6 +40,9 @@ class AutonomyEngine:
                 else:
                     outcome = self.repository.finish_run(run_id, "completed", result=str(result))
             except Exception as error:
-                outcome = self.repository.finish_run(run_id, "failed", error=type(error).__name__ + ": " + str(error)[:500])
+                outcome = self.repository.finish_run(
+                    run_id, "failed",
+                    error=type(error).__name__ + ": " + str(error)[:500]
+                )
             outcomes.append(outcome)
         return outcomes
