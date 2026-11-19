@@ -45,3 +45,11 @@ class GoalResponse(BaseModel):
     status: str
     trigger_type: str
     next_run_at: Optional[str] = None
+
+
+class WorkflowCreateRequest(BaseModel):
+    request: str = Field(min_length=1, max_length=4000)
+
+
+class ApprovalDecisionRequest(BaseModel):
+    approval_id: str = Field(min_length=1, max_length=128)
