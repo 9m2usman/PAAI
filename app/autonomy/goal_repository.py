@@ -10,6 +10,8 @@ from app.identity.context import current_identity
 
 
 class GoalRepository:
+    MAX_PENDING_EVENTS_PER_GOAL = 100
+
     def __init__(self, database_path="data/paai_autonomy.db"):
         self.database_path = str(database_path)
         self.lock = threading.RLock()
@@ -134,6 +136,8 @@ class GoalRepository:
                         (row["goal_id"], owner)
                     ).fetchone()["pending_event_json"]
                     pending = json.loads(queued) if queued else []
+                    if len(pending) >= self.MAX_PENDING_EVENTS_PER_GOAL:
+                        raise ValueError("Event goal queue is full; retry after pending work is processed.")
                     pending.append({
                         "event_id": event_id,
                         "event_type": event_type,
