@@ -72,6 +72,12 @@ def create_app(runtime=None, settings=None):
     app.include_router(auth.router)
     app.include_router(goals.router)
     app.include_router(google_oauth.router)
+    app.add_api_route(
+        "/auth/google/callback",
+        google_oauth.google_callback,
+        methods=["GET"],
+        include_in_schema=False,
+    )
     return app
 
 
