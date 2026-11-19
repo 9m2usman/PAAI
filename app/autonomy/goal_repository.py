@@ -126,7 +126,7 @@ class GoalRepository:
                     return {"event_id": event_id, "duplicate": True,
                             "matched_goals": existing["matched_goals"]}
                 goals = db.execute("""SELECT goal_id FROM autonomy_goals
-                    WHERE owner_id=? AND event_type=? AND trigger_type='event' AND status='active'""",
+                    WHERE owner_id=? AND event_type=? AND trigger_type='event' AND status IN ('active','running')""",
                     (owner, event_type)).fetchall()
                 for row in goals:
                     queued = db.execute(
@@ -141,7 +141,7 @@ class GoalRepository:
                         "occurred_at": occurred_at
                     })
                     db.execute("""UPDATE autonomy_goals SET next_run_at=?,pending_event_json=?,updated_at=?
-                        WHERE goal_id=? AND owner_id=? AND status='active'""",
+                        WHERE goal_id=? AND owner_id=? AND status IN ('active','running')""",
                         (now, json.dumps(pending, separators=(",", ":"), sort_keys=True),
                          now, row["goal_id"], owner))
                 db.execute("""INSERT INTO autonomy_events
@@ -220,6 +220,9 @@ class GoalRepository:
                 next_status = "active"
                 next_run = (now_dt + timedelta(seconds=goal["interval_seconds"])).isoformat()
             elif status == "completed" and goal["trigger_type"] == "event" and pending_events:
+                next_status = "active"
+                next_run = now
+            elif status == "failed" and goal["trigger_type"] == "event" and pending_events:
                 next_status = "active"
                 next_run = now
             db.execute("""UPDATE autonomy_goals SET status=?,next_run_at=?,last_result=?,
