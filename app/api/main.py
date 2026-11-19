@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, goals, health
+from app.api.routes import auth, goals, health, events
 from app.api.routes import google_oauth
 from app.production.settings import get_settings
 from app.production.logging import configure_logging
@@ -71,6 +71,7 @@ def create_app(runtime=None, settings=None):
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(goals.router)
+    app.include_router(events.router)
     app.include_router(google_oauth.router)
     app.add_api_route(
         "/auth/google/callback",
