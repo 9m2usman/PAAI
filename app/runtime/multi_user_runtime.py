@@ -52,6 +52,7 @@ class MultiUserRuntime:
         self.autonomy_policy = AutonomyPolicy()
         self.goal_repository = GoalRepository(autonomy_database)
         self.approval_bridge = AutonomyApprovalBridge(autonomy_database)
+        self.approval_bridge.recover_workflows()
         self.triggers = TriggerRegistry(max_payload_bytes=self.autonomy_policy.max_event_payload_bytes)
         self.goals = GoalService(self.goal_repository, self.autonomy_policy, self.triggers)
         executor = autonomy_executor

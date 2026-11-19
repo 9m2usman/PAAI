@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import sqlite3
 from pathlib import Path
 
 from app.approvals.approval_manager import ApprovalManager
@@ -123,6 +124,32 @@ class DurableApprovalTests(unittest.TestCase):
             self.assertEqual(result["run_id"], claim["run_id"])
             self.assertEqual(repository.list_runs(goal["goal_id"])[0]["status"], "completed")
             self.assertEqual(repository.get_goal(goal["goal_id"])["status"], "completed")
+
+    def test_bridge_recovers_orphaned_pending_workflow_after_restart(self):
+        repository = GoalRepository(self.db)
+        bridge = AutonomyApprovalBridge(self.db)
+        with identity_scope(self.identity):
+            goal = repository.create_goal("Send a report")
+            repository.request_run(goal["goal_id"])
+            claim = repository.claim_due()[0]
+        import json
+        with sqlite3.connect(self.db) as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS workflows (
+                workflow_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, state_json TEXT NOT NULL,
+                status TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+            state = {
+                "workflow_id": "orphan-workflow", "user_id": "owner-a",
+                "origin_goal_id": goal["goal_id"], "origin_run_id": claim["run_id"],
+                "status": "awaiting_approval", "steps": [], "current_step": 0,
+                "results": [], "pending_approval": {"approval_id": "approval-1"},
+            }
+            db.execute("INSERT INTO workflows(workflow_id,user_id,state_json,status) VALUES(?,?,?,?)",
+                       ("orphan-workflow", "owner-a", json.dumps(state), "awaiting_approval"))
+        recovered = bridge.recover_workflows()
+        self.assertEqual(recovered[0]["status"], "awaiting_approval")
+        with identity_scope(self.identity):
+            self.assertEqual(repository.get_goal(goal["goal_id"])["status"], "awaiting_approval")
 
     def test_bridge_rejects_other_tenant(self):
         repository = GoalRepository(self.db)

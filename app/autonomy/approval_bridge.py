@@ -31,6 +31,66 @@ class AutonomyApprovalBridge:
         finally:
             db.close()
 
+    def recover_workflows(self):
+        """Reconcile workflow state with goal runs after a process restart."""
+        now = datetime.now(timezone.utc).isoformat()
+        recovered = []
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute("""SELECT workflow_id,user_id,state_json,status
+                FROM workflows WHERE status IN ('awaiting_approval','completed','failed','rejected','execution_uncertain')""").fetchall()
+            for row in rows:
+                state = json.loads(row["state_json"])
+                run_id = state.get("origin_run_id")
+                goal_id = state.get("origin_goal_id")
+                workflow_id = row["workflow_id"]
+                owner = row["user_id"]
+                if not run_id or not goal_id:
+                    continue
+                link = db.execute("""SELECT status FROM autonomy_approval_links
+                    WHERE workflow_id=? AND owner_id=?""", (workflow_id, owner)).fetchone()
+                if link is not None:
+                    continue
+                run = db.execute("""SELECT status FROM autonomy_runs
+                    WHERE run_id=? AND goal_id=? AND owner_id=?""", (run_id, goal_id, owner)).fetchone()
+                goal = db.execute("""SELECT status,interval_seconds,trigger_type,pending_event_json
+                    FROM autonomy_goals WHERE goal_id=? AND owner_id=?""", (goal_id, owner)).fetchone()
+                if run is None or goal is None or run["status"] != "running" or goal["status"] != "running":
+                    continue
+                workflow_status = row["status"]
+                if workflow_status == "awaiting_approval":
+                    final_status = "awaiting_approval"
+                    link_status = "pending"
+                    run_result = json.dumps({"workflow_id": workflow_id})
+                    error = None
+                    goal_next = None
+                else:
+                    final_status = "failed" if workflow_status in {"failed", "rejected", "execution_uncertain"} else "completed"
+                    link_status = workflow_status
+                    run_result = json.dumps(state, default=str)
+                    error = "Workflow execution outcome is uncertain; automatic replay is blocked." if workflow_status == "execution_uncertain" else ("Workflow rejected by user." if workflow_status == "rejected" else None)
+                    goal_next = None
+                    if final_status == "completed" and goal["interval_seconds"]:
+                        final_status = "active"
+                        goal_next = (datetime.now(timezone.utc) + timedelta(seconds=goal["interval_seconds"])).isoformat()
+                    elif final_status == "completed" and goal["trigger_type"] == "event" and goal["pending_event_json"]:
+                        if json.loads(goal["pending_event_json"]):
+                            final_status = "active"
+                            goal_next = now
+                db.execute("""INSERT INTO autonomy_approval_links
+                    (workflow_id,run_id,goal_id,owner_id,status,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,?)""",
+                    (workflow_id, run_id, goal_id, owner, link_status, now, now))
+                db.execute("""UPDATE autonomy_runs SET status=?,finished_at=?,result=?,error=?
+                    WHERE run_id=? AND owner_id=? AND status='running'""",
+                    (final_status, now, run_result, error, run_id, owner))
+                db.execute("""UPDATE autonomy_goals SET status=?,next_run_at=?,last_result=?,lease_expires_at=NULL,updated_at=?
+                    WHERE goal_id=? AND owner_id=? AND status='running'""",
+                    (final_status, goal_next, run_result, now, goal_id, owner))
+                recovered.append({"workflow_id": workflow_id, "run_id": run_id, "status": final_status})
+            db.commit()
+        return recovered
+
     def pause_run_for_approval(self, run_id, goal_id, workflow_id):
         owner = current_identity().user_id
         now = datetime.now(timezone.utc).isoformat()
