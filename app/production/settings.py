@@ -1,0 +1,62 @@
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from dotenv import load_dotenv
+
+
+@dataclass(frozen=True)
+class Settings:
+    auth_secret: str
+    auth_database: str
+    memory_database: str
+    autonomy_database: str
+    host: str
+    port: int
+    log_level: str
+    cors_origins: list
+    max_request_bytes: int
+    requests_per_minute: int
+    token_lifetime_seconds: int
+    docs_enabled: bool
+    google_client_id: str
+    google_client_secret: str
+    google_redirect_uri: str
+    credential_encryption_key: str
+    credential_database: str
+    integration_goal_executor_enabled: bool
+
+
+def get_settings():
+    load_dotenv()
+    secret = os.getenv("PAAI_AUTH_SECRET", "").strip()
+    if len(secret.encode()) < 32 or secret.startswith("replace_with_"):
+        raise ValueError("PAAI_AUTH_SECRET must be a strong random secret of at least 32 characters.")
+    data_dir = Path(os.getenv("PAAI_DATA_DIR", "data"))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    origins = [item.strip() for item in os.getenv("PAAI_CORS_ORIGINS", "").split(",") if item.strip()]
+    if "*" in origins:
+        raise ValueError("Wildcard CORS origins are not allowed with credentialed requests.")
+    if int(os.getenv("PAAI_MAX_REQUEST_BYTES", "1048576")) < 1024:
+        raise ValueError("PAAI_MAX_REQUEST_BYTES must be at least 1024.")
+    if int(os.getenv("PAAI_REQUESTS_PER_MINUTE", "120")) < 1:
+        raise ValueError("PAAI_REQUESTS_PER_MINUTE must be positive.")
+    return Settings(
+        auth_secret=secret,
+        auth_database=os.getenv("PAAI_AUTH_DATABASE", str(data_dir / "paai_auth.db")),
+        memory_database=os.getenv("PAAI_MEMORY_DATABASE", str(data_dir / "paai_memory.db")),
+        autonomy_database=os.getenv("PAAI_AUTONOMY_DATABASE", str(data_dir / "paai_autonomy.db")),
+        host=os.getenv("PAAI_HOST", "0.0.0.0"),
+        port=int(os.getenv("PAAI_PORT", "8000")),
+        log_level=os.getenv("PAAI_LOG_LEVEL", "INFO").upper(),
+        cors_origins=origins,
+        max_request_bytes=int(os.getenv("PAAI_MAX_REQUEST_BYTES", "1048576")),
+        requests_per_minute=int(os.getenv("PAAI_REQUESTS_PER_MINUTE", "120")),
+        token_lifetime_seconds=int(os.getenv("PAAI_TOKEN_LIFETIME_SECONDS", "3600")),
+        docs_enabled=os.getenv("PAAI_ENABLE_DOCS", "false").lower() == "true",
+        google_client_id=os.getenv("GOOGLE_CLIENT_ID", "").strip(),
+        google_client_secret=os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
+        google_redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "").strip(),
+        credential_encryption_key=os.getenv("PAAI_CREDENTIAL_ENCRYPTION_KEY", "").strip(),
+        credential_database=os.getenv("PAAI_CREDENTIAL_DATABASE", str(data_dir / "paai_credentials.db")),
+        integration_goal_executor_enabled=os.getenv("PAAI_ENABLE_INTEGRATION_GOAL_EXECUTOR", "false").lower() == "true",
+    )

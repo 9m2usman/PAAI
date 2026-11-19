@@ -5,29 +5,57 @@ class IntegrationToolAdapter:
 
     def execute(
         self,
-        user_id,
+        authenticated_user_id,
         integration,
         action,
         parameters,
         approval_id=None
     ):
 
+        if (
+            not isinstance(authenticated_user_id, str)
+            or not authenticated_user_id.strip()
+        ):
+            raise ValueError("Authenticated user ID is required.")
+
+        if not isinstance(integration, str) or not integration.strip():
+            raise ValueError("Integration name is required.")
+
+        if not isinstance(action, str) or not action.strip():
+            raise ValueError("Integration action is required.")
+
+        if not isinstance(parameters, dict):
+            raise ValueError("Integration parameters must be a dictionary.")
+
         return self.execution_manager.execute(
-            user_id=user_id,
+            user_id=authenticated_user_id,
             integration=integration,
             action=action,
             parameters=parameters,
             approval_id=approval_id
         )
 
-    def register_with_registry(self, tool_registry):
+    def for_authenticated_user(self, authenticated_user_id):
 
-        if not isinstance(tool_registry, dict):
-            raise ValueError("Tool registry must be a dictionary.")
+        if (
+            not isinstance(authenticated_user_id, str)
+            or not authenticated_user_id.strip()
+        ):
+            raise ValueError("Authenticated user ID is required.")
 
-        if "execute_integration" in tool_registry:
-            raise ValueError("Integration tool is already registered.")
+        def execute_for_user(
+            integration,
+            action,
+            parameters,
+            approval_id=None
+        ):
 
-        tool_registry["execute_integration"] = self.execute
+            return self.execute(
+                authenticated_user_id,
+                integration,
+                action,
+                parameters,
+                approval_id
+            )
 
-        return True
+        return execute_for_user

@@ -1,6 +1,6 @@
+import time
 import json
 import secrets
-import time
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -10,6 +10,7 @@ class GoogleOAuthManager:
 
     AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
     TOKEN_URL = "https://oauth2.googleapis.com/token"
+    STATE_TTL_SECONDS = 600
 
     SCOPES = [
         "https://www.googleapis.com/auth/gmail.readonly",
@@ -41,7 +42,10 @@ class GoogleOAuthManager:
             raise ValueError("Valid user ID is required.")
 
         state = secrets.token_urlsafe(32)
-        self.pending_states[state] = user_id
+        self.pending_states[state] = {
+            "user_id": user_id,
+            "created_at": time.time()
+        }
 
         params = {
             "client_id": self.client_id,
@@ -87,10 +91,22 @@ class GoogleOAuthManager:
         if not isinstance(code, str) or not code.strip():
             raise ValueError("Authorization code is required.")
 
-        expected_user = self.pending_states.pop(state, None)
-
-        if expected_user != user_id:
+        if not isinstance(state, str) or not state:
             raise PermissionError("Invalid or expired OAuth state.")
+
+        state_data = self.pending_states.get(state)
+
+        if not state_data:
+            raise PermissionError("Invalid or expired OAuth state.")
+
+        if state_data["user_id"] != user_id:
+            raise PermissionError("Invalid or expired OAuth state.")
+
+        if time.time() - state_data["created_at"] > self.STATE_TTL_SECONDS:
+            self.pending_states.pop(state, None)
+            raise PermissionError("Invalid or expired OAuth state.")
+
+        self.pending_states.pop(state, None)
 
         token_data = self._send_token_request({
             "code": code,
@@ -125,6 +141,9 @@ class GoogleOAuthManager:
         }
 
     def get_valid_credentials(self, user_id, integration):
+
+        if integration not in {"gmail", "calendar"}:
+            raise ValueError("Unsupported Google integration.")
 
         credentials = self.credential_manager.get_credentials(
             user_id, integration
@@ -165,3 +184,24 @@ class GoogleOAuthManager:
         )
 
         return credentials
+
+    def exchange_code_from_state(self, code, state):
+        if not isinstance(state, str) or not state:
+            raise PermissionError("Invalid or expired OAuth state.")
+        state_data = self.pending_states.get(state)
+        if not state_data:
+            raise PermissionError("Invalid or expired OAuth state.")
+        user_id = state_data.get("user_id")
+        return self.exchange_code(user_id, code, state)
+
+    def create_authorization_url_for_current_identity(self):
+        from app.identity.context import current_identity
+        return self.create_authorization_url(current_identity().user_id)
+
+    def exchange_code_for_current_identity(self, code, state):
+        from app.identity.context import current_identity
+        return self.exchange_code(current_identity().user_id, code, state)
+
+    def get_valid_credentials_for_current_identity(self, integration):
+        from app.identity.context import current_identity
+        return self.get_valid_credentials(current_identity().user_id, integration)

@@ -1,108 +1,72 @@
-\## Phase 1 + Phase 2 — Final Review
+# PAAI Project Progress
 
+## Official roadmap
 
+| Phase | Name | Recorded status |
+|---|---|---|
+| 1 | Understanding AI agents | Combined Phase 1/2 assessment reported passed; final practical review not explicitly confirmed |
+| 2 | Building the first autonomous agent | Implementation and automated checks reported complete; live autonomous demonstration not explicitly confirmed |
+| 3 | Memory and personalization | Officially closed; 24 tests reported passing; documentation updated |
+| 4 | Multi-agent orchestration | Implementation and tests reported passing; formal engineering assessment not explicitly confirmed |
+| 5 | Real-world workflow execution | Officially closed after hardening, regression tests, documentation review, and 9/10 MCQ assessment; live Google OAuth/Gmail/Calendar verification deferred |
+| 6 | Multi-user agent infrastructure | Implementation and authenticated-memory remediation committed on `phase6-multi-user`; user deferred final regression rerun and MCQ assessment |
+| 7 | Advanced autonomy | Blueprint and initial implementation committed on `phase7-advanced-autonomy`; local tests/review pending |
+| 8 | Production engineering | Core implementation plus durable workflow/approval integration committed on `phase8-production-engineering`; fresh local regression and CI verification pending |
 
-\### Assessment
+## Current work
 
-\- Combined assessment: 27/30 (90%)
+PAAI remains one continuous codebase. Phase-specific branches preserve the existing `main` branch.
 
-\- Round 1: 8/10
+### Phase 7 — Advanced Autonomy
 
-\- Round 2: 10/10
+Branch: `phase7-advanced-autonomy`
 
-\- Round 3: 9/10
+Implemented foundation:
+- Persistent tenant-scoped goals and run history in SQLite.
+- Manual goals, one-time scheduled goals, and fixed-interval recurring goals.
+- Goal listing, inspection, pause, resume, cancel, and run-now operations.
+- Atomic due-goal claiming.
+- Deterministic step/runtime/batch/payload limits.
+- Scheduler tick and execution engine.
+- Safe reasoning-only default executor; custom trusted executors can be injected.
+- Allowlisted event type and payload validation.
+- Focused test suite authored.
 
+Remaining boundaries: local tests not yet run; event dispatch and approval-resume integration are not complete; fixed interval scheduling only; custom executor must enforce hard runtime and integration permissions.
 
+### Phase 8 — Production Engineering
 
-\### Phase 2 implementation
+Branch: `phase8-production-engineering`
 
-\- Consolidated planned agent runtime.
+Implemented foundation:
+- FastAPI app factory with register/login/me routes.
+- Authenticated goal CRUD/control/run/history routes.
+- Bearer token verification and request-local identity scope.
+- Health and readiness endpoints.
+- Environment settings validation, request IDs, basic security headers, Content-Length request-size bound, process-local per-IP rate limiting, explicit CORS.
+- Secret-redaction logging filter.
+- Fernet encryption wired into persistent per-user Google OAuth credential storage.
+- Authenticated Google connect/status/disconnect routes and state-validated callback.
+- Background worker entry point that scopes each registered principal separately.
+- Durable SQLite approval records with expiry, exact-action fingerprinting, tenant isolation, and single-use consumption.
+- Durable workflow state and progress; interrupted external actions fail closed as `execution_uncertain` rather than being replayed.
+- Durable per-user integration permissions, including distinct explicit automatic-execution grants.
+- Durable bridge from an approval-gated integration workflow to its originating autonomy goal/run, including restart reconciliation.
+- Optional integration-backed goal executor controlled by `PAAI_ENABLE_INTEGRATION_GOAL_EXECUTOR`; reasoning-only remains the default.
+- Dockerfile, Docker Compose, GitHub Actions CI workflow, production runbook, and focused crypto tests.
 
-\- Implemented controlled tool registration and execution.
+Remaining boundaries: the newly added durability tests and full regression suite still need a fresh local run and CI verification; Google OAuth state is process-local (run one API process for callback flow); audit logging is still in-memory; integration-backed goal execution is opt-in and defaults off; rate limiting is process-local; deployment is single-host SQLite and requires TLS ingress supplied by the host.
 
-\- Added tool argument validation.
+## Phase 6 pending user review
 
-\- Improved project file discovery and secret-file exclusions.
+The user explicitly deferred Phase 6's complete test rerun and MCQ assessment. The authenticated memory facade and actual Phase 3 memory-isolation tests are committed on the Phase 6 branch. Do not claim Phase 6 is formally closed until the user returns to its tests and assessment.
 
-\- Added structured task-plan generation and validation.
+## Repository workflow
 
-\- Added reasoning-step retry and failure handling.
-
-\- Added execution limits and task-state tracking.
-
-\- Added automated tool-registry tests.
-
-
-
-\### Verification
-
-\- Unit tests: User confirmed execution.
-
-\- Python compilation: User confirmed execution.
-
-\- File-listing security check: User confirmed execution.
-
-\- Live multi-step autonomous-agent demonstration: Not yet confirmed.
-
-
-
-\### Git
-
-\- Independent repository: E:\\PAAI
-
-\- No files staged.
-
-\- No commits created.
-
-
-
-\### Official roadmap status
-
-\- Phase 1: In progress — combined assessment completed; final practical review pending.
-
-\- Phase 2: In progress — implementation and automated checks completed; live autonomous demonstration pending.
-
-
-
-\### Remaining completion criteria
-
-1\. Confirm successful live multi-step autonomous execution.
-
-2\. Review final documentation and architecture.
-
-3\. Formally close Phase 1 and Phase 2.
-
-
-
-Official Current Phase: Phase 3 — Memory and Personalization
-
-Implementation: Complete
-Automated Tests: 24 Passed
-Final Engineering Review: Pending
-MCQ Assessment: Pending
-Official Phase Closure: Pending
-## Phase 4 — Multi-Agent Orchestration
-- Status: Implementation and tests passed; final review/assessment pending.
-- Built a supervisor with Research, Analysis, and Writing agents.
-- Added agent registration, structured communication, shared task state, task delegation, and failure handling.
-- Phase-specific tests and the full project test suite reported passing.
-- Known limitations and future improvements are documented in `PHASE_4.md`.
-
-## Phase 4 — Multi-Agent Orchestration
-Status: Implementation and automated tests passed.
-
-Implemented:
-- Agent registry and specialized agents
-- Supervisor and sequential task delegation
-- Shared task state
-- Agent communication
-- Failure handling and bounded retries
-
-Tests:
-- Phase 4 test suite: passed
-- Full project test suite: passed
-
-Remaining:
-- Complete engineering review
-- Complete Phase 4 assessment
-- Confirm official phase closure
+- Repository: https://github.com/9m2usman/PAAI
+- Phase 5: `phase5-hardening`
+- Phase 6: `phase6-multi-user`
+- Phase 7: `phase7-advanced-autonomy`
+- Phase 8: `phase8-production-engineering`
+- No phase branch has been merged into `main`.
+- Keep `.env`, `venv`, API keys, OAuth secrets, access tokens, encryption keys, and database files out of Git.
