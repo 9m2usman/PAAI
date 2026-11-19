@@ -19,7 +19,8 @@ class TriggerRegistry:
         if not isinstance(payload, dict):
             raise ValueError("Event payload must be an object.")
         try:
-            size = len(json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8"))
+            encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            size = len(encoded)
         except Exception:
             raise ValueError("Event payload is not serializable.") from None
         if size > self.max_payload_bytes:
