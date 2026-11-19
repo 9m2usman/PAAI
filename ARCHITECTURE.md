@@ -73,7 +73,7 @@ flowchart TD
 | Profiles | SQLite | User-scoped service |
 | Long-term memory | Existing Phase 3 SQLite store + authenticated facade | Low-level functions still accept user IDs internally |
 | Goals and runs | SQLite | Tenant-scoped; single-host scheduler |
-| Credentials | In-memory Phase 5 manager | Not durable or encrypted at rest |
+| Credentials | SQLite credential store with Fernet encryption | Encryption key must be backed up separately; OAuth pending state is process-local |
 | Permissions | In-memory manager | Lost on restart |
 | Workflows/approvals/audit | In-memory Phase 5 managers | Not durable across restart |
 
