@@ -23,9 +23,7 @@ def get_workflow(workflow_id: str, request: Request,
                  identity=Depends(authenticated_identity)):
     try:
         return runtime_workflow(request, identity.user_id, workflow_id)
-    except PermissionError:
-        raise HTTPException(status_code=404, detail="Workflow not found.") from None
-    except ValueError:
+    except (PermissionError, ValueError):
         raise HTTPException(status_code=404, detail="Workflow not found.") from None
 
 
@@ -38,13 +36,20 @@ def approve_workflow(workflow_id: str, payload: ApprovalDecisionRequest,
         pending = workflow.get("pending_approval")
         if not pending or pending.get("approval_id") != payload.approval_id:
             raise ValueError("Approval does not match this workflow.")
-        runtime.approvals.approve(identity.user_id, payload.approval_id)
-        return runtime.workflow_manager.resume(
-            identity.user_id, workflow_id, payload.approval_id
-        )
+        approval = runtime.approvals.get_approval(identity.user_id, payload.approval_id)
+        if approval["status"] == "pending":
+            runtime.approvals.approve(identity.user_id, payload.approval_id)
+        elif approval["status"] != "approved":
+            raise ValueError("Approval is no longer available.")
+        updated = runtime.workflow_manager.resume(identity.user_id, workflow_id, payload.approval_id)
+        runtime.approval_bridge.complete_workflow(
+            workflow_id, updated["status"], updated)
+        return updated
     except PermissionError:
         raise HTTPException(status_code=403, detail="Approval is not permitted.") from None
     except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from None
+    except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from None
 
 
@@ -53,9 +58,9 @@ def reject_workflow(workflow_id: str, payload: ApprovalDecisionRequest,
                     request: Request, identity=Depends(authenticated_identity)):
     runtime = get_runtime(request)
     try:
-        return runtime.workflow_manager.reject(
-            identity.user_id, workflow_id, payload.approval_id
-        )
+        updated = runtime.workflow_manager.reject(identity.user_id, workflow_id, payload.approval_id)
+        runtime.approval_bridge.complete_workflow(workflow_id, updated["status"], updated)
+        return updated
     except PermissionError:
         raise HTTPException(status_code=403, detail="Approval is not permitted.") from None
     except ValueError as error:
@@ -63,5 +68,4 @@ def reject_workflow(workflow_id: str, payload: ApprovalDecisionRequest,
 
 
 def runtime_workflow(request, user_id, workflow_id):
-    runtime = get_runtime(request)
-    return runtime.workflow_manager.get_workflow(user_id, workflow_id)
+    return get_runtime(request).workflow_manager.get_workflow(user_id, workflow_id)

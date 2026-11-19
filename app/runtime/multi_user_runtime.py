@@ -13,6 +13,7 @@ from app.autonomy.triggers import TriggerRegistry
 from app.autonomy.engine import AutonomyEngine
 from app.autonomy.scheduler import AutonomyScheduler
 from app.autonomy.agent_executor import ReasoningGoalExecutor
+from app.autonomy.integration_executor import IntegrationGoalExecutor
 from app.autonomy.approval_bridge import AutonomyApprovalBridge
 from app.integrations.google_oauth import GoogleOAuthManager
 from app.integrations.register_integrations import create_phase5_runtime
@@ -24,7 +25,7 @@ class MultiUserRuntime:
         token_lifetime_seconds=3600, memory_database=None,
         autonomy_database="data/paai_autonomy.db", autonomy_executor=None,
         google_oauth_config=None, credential_database=None,
-        credential_encryption_key=None,
+        credential_encryption_key=None, enable_integration_goal_executor=False,
     ):
         self.auth_repository = AuthRepository(auth_database)
         self.token_service = TokenService(token_secret, token_lifetime_seconds)
@@ -53,8 +54,11 @@ class MultiUserRuntime:
         self.approval_bridge = AutonomyApprovalBridge(autonomy_database)
         self.triggers = TriggerRegistry(max_payload_bytes=self.autonomy_policy.max_event_payload_bytes)
         self.goals = GoalService(self.goal_repository, self.autonomy_policy, self.triggers)
+        executor = autonomy_executor
+        if executor is None and enable_integration_goal_executor:
+            executor = IntegrationGoalExecutor(self.workflow_agent)
         self.autonomy_engine = AutonomyEngine(
-            self.goal_repository, autonomy_executor or ReasoningGoalExecutor(),
+            self.goal_repository, executor or ReasoningGoalExecutor(),
             self.autonomy_policy, approval_bridge=self.approval_bridge)
         self.scheduler = AutonomyScheduler(self.autonomy_engine)
 

@@ -1,0 +1,109 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from app.approvals.approval_manager import ApprovalManager
+from app.workflows.workflow_manager import WorkflowManager
+from app.autonomy.goal_repository import GoalRepository
+from app.autonomy.approval_bridge import AutonomyApprovalBridge
+from app.identity.context import identity_scope
+from app.auth.token_service import TokenService
+
+
+class FakeExecution:
+    def __init__(self, approvals):
+        self.approval_manager = approvals
+        self.risk_evaluator = type("Risk", (), {"classify": lambda self, *args: "high"})()
+        self.audit_logger = type("Audit", (), {"log": lambda self, *args: None})()
+
+
+class DurableApprovalTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = str(Path(self.temp.name) / "paai.db")
+        tokens = TokenService("x" * 40)
+        self.identity = tokens.verify_token(tokens.issue_token("owner-a", "a@example.com"))
+        self.other = tokens.verify_token(tokens.issue_token("owner-b", "b@example.com"))
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_approval_survives_manager_restart_and_is_single_use(self):
+        first = ApprovalManager(database_path=self.db)
+        action = {"integration": "gmail", "action": "send_email", "parameters": {"to": "a@example.com"}}
+        pending = first.request_approval("owner-a", action)
+        first.close()
+        second = ApprovalManager(database_path=self.db)
+        self.assertEqual(second.get_approval("owner-a", pending["approval_id"])["status"], "pending")
+        second.approve("owner-a", pending["approval_id"])
+        second.close()
+        third = ApprovalManager(database_path=self.db)
+        self.assertEqual(third.get_approval("owner-a", pending["approval_id"])["status"], "approved")
+        third.consume_approval("owner-a", pending["approval_id"], action)
+        with self.assertRaises(PermissionError):
+            third.consume_approval("owner-a", pending["approval_id"], action)
+        third.close()
+
+    def test_approval_is_tenant_isolated_and_action_bound(self):
+        manager = ApprovalManager(database_path=self.db)
+        action = {"integration": "gmail", "action": "send_email", "parameters": {"to": "a@example.com"}}
+        pending = manager.request_approval("owner-a", action)
+        with self.assertRaises(PermissionError):
+            manager.get_approval("owner-b", pending["approval_id"])
+        manager.approve("owner-a", pending["approval_id"])
+        changed = {"integration": "gmail", "action": "send_email", "parameters": {"to": "attacker@example.com"}}
+        with self.assertRaises(PermissionError):
+            manager.consume_approval("owner-a", pending["approval_id"], changed)
+        manager.close()
+
+    def test_workflow_survives_restart_and_does_not_replay_inflight_action(self):
+        approvals = ApprovalManager(database_path=self.db)
+        workflow = WorkflowManager(FakeExecution(approvals), database_path=self.db)
+        state = {
+            "workflow_id": "wf-1", "user_id": "owner-a", "steps": [
+                {"integration": "gmail", "action": "send_email", "parameters": {"to": "a@example.com"}}
+            ], "current_step": 0, "results": [], "status": "awaiting_approval",
+            "pending_approval": {"approval_id": "approval-1", "action_data": {}},
+            "origin_goal_id": None, "origin_run_id": None,
+        }
+        with workflow.db:
+            workflow._save(state)
+        workflow.close()
+        restarted = WorkflowManager(FakeExecution(approvals), database_path=self.db)
+        self.assertEqual(restarted.get_workflow("owner-a", "wf-1")["status"], "awaiting_approval")
+        with self.assertRaises(ValueError):
+            restarted.get_workflow("owner-b", "wf-1")
+        restarted.close()
+        approvals.close()
+
+    def test_approval_pauses_and_resolves_original_goal_run(self):
+        repository = GoalRepository(self.db)
+        bridge = AutonomyApprovalBridge(self.db)
+        with identity_scope(self.identity):
+            goal = repository.create_goal("Send a report")
+            repository.request_run(goal["goal_id"])
+            claim = repository.claim_due()[0]
+            paused = bridge.pause_run_for_approval(claim["run_id"], goal["goal_id"], "workflow-1")
+            self.assertEqual(paused["status"], "awaiting_approval")
+            self.assertEqual(repository.get_goal(goal["goal_id"])["status"], "awaiting_approval")
+            result = bridge.complete_workflow("workflow-1", "completed", {"sent": True})
+            self.assertEqual(result["run_id"], claim["run_id"])
+            self.assertEqual(repository.list_runs(goal["goal_id"])[0]["status"], "completed")
+            self.assertEqual(repository.get_goal(goal["goal_id"])["status"], "completed")
+
+    def test_bridge_rejects_other_tenant(self):
+        repository = GoalRepository(self.db)
+        bridge = AutonomyApprovalBridge(self.db)
+        with identity_scope(self.identity):
+            goal = repository.create_goal("Send a report")
+            repository.request_run(goal["goal_id"])
+            claim = repository.claim_due()[0]
+            bridge.pause_run_for_approval(claim["run_id"], goal["goal_id"], "workflow-1")
+        with identity_scope(self.other):
+            self.assertIsNone(bridge.complete_workflow("workflow-1", "completed", {}))
+        with identity_scope(self.identity):
+            self.assertEqual(repository.get_goal(goal["goal_id"])["status"], "awaiting_approval")
+
+
+if __name__ == "__main__":
+    unittest.main()

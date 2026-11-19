@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 
+
 @dataclass(frozen=True)
 class Settings:
     auth_secret: str
@@ -22,6 +23,8 @@ class Settings:
     google_redirect_uri: str
     credential_encryption_key: str
     credential_database: str
+    integration_goal_executor_enabled: bool
+
 
 def get_settings():
     load_dotenv()
@@ -55,4 +58,5 @@ def get_settings():
         google_redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "").strip(),
         credential_encryption_key=os.getenv("PAAI_CREDENTIAL_ENCRYPTION_KEY", "").strip(),
         credential_database=os.getenv("PAAI_CREDENTIAL_DATABASE", str(data_dir / "paai_credentials.db")),
+        integration_goal_executor_enabled=os.getenv("PAAI_ENABLE_INTEGRATION_GOAL_EXECUTOR", "false").lower() == "true",
     )

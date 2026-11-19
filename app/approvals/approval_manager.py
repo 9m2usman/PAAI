@@ -34,17 +34,13 @@ class ApprovalManager:
         if row is None:
             return None
         return {
-            "approval_id": row["approval_id"],
-            "user_id": row["user_id"],
-            "action_data": json.loads(row["action_json"]),
-            "fingerprint": row["fingerprint"],
-            "status": row["status"],
-            "created_at": row["created_at"],
-            "expires_at": row["expires_at"],
+            "approval_id": row["approval_id"], "user_id": row["user_id"],
+            "action_data": json.loads(row["action_json"]), "fingerprint": row["fingerprint"],
+            "status": row["status"], "created_at": row["created_at"], "expires_at": row["expires_at"],
         }
 
-    def _expire(self, db, approval_id):
-        db.execute("""UPDATE approvals SET status='expired'
+    def _expire(self, approval_id):
+        self.db.execute("""UPDATE approvals SET status='expired'
             WHERE approval_id=? AND status IN ('pending','approved') AND expires_at<=?""",
             (approval_id, time.time()))
 
@@ -60,8 +56,8 @@ class ApprovalManager:
         if not isinstance(action_data["parameters"], dict):
             raise ValueError("Invalid action parameters.")
         created = time.time()
-        approval_id = str(uuid.uuid4())
         safe_data = deepcopy(action_data)
+        approval_id = str(uuid.uuid4())
         record = {
             "approval_id": approval_id, "user_id": user_id, "action_data": safe_data,
             "fingerprint": self._fingerprint(safe_data), "status": "pending",
@@ -75,6 +71,17 @@ class ApprovalManager:
                  "pending", created, record["expires_at"]))
         return deepcopy(record)
 
+    def get_approval(self, user_id, approval_id):
+        with self.lock, self.db:
+            row = self.db.execute("SELECT * FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
+            if row is None:
+                raise ValueError("Approval request not found.")
+            if row["user_id"] != user_id:
+                raise PermissionError("Approval belongs to another user.")
+            self._expire(approval_id)
+            row = self.db.execute("SELECT * FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
+            return self._row(row)
+
     def _decide(self, user_id, approval_id, status):
         with self.lock, self.db:
             row = self.db.execute("SELECT * FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
@@ -82,7 +89,7 @@ class ApprovalManager:
                 raise ValueError("Approval request not found.")
             if row["user_id"] != user_id:
                 raise PermissionError("Approval belongs to another user.")
-            self._expire(self.db, approval_id)
+            self._expire(approval_id)
             row = self.db.execute("SELECT * FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
             if row["status"] != "pending":
                 if row["status"] == "expired":
@@ -91,7 +98,7 @@ class ApprovalManager:
             self.db.execute("UPDATE approvals SET status=? WHERE approval_id=? AND status='pending'",
                             (status, approval_id))
             updated = self.db.execute("SELECT * FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
-        return self._row(updated)
+            return self._row(updated)
 
     def approve(self, user_id, approval_id):
         return self._decide(user_id, approval_id, "approved")
@@ -106,7 +113,7 @@ class ApprovalManager:
                 raise ValueError("Approval request not found.")
             if row["user_id"] != user_id:
                 raise PermissionError("Approval belongs to another user.")
-            self._expire(self.db, approval_id)
+            self._expire(approval_id)
             row = self.db.execute("SELECT * FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
             if row["status"] == "expired":
                 raise PermissionError("Approval request has expired.")
@@ -123,12 +130,12 @@ class ApprovalManager:
 
     def get_pending_approvals(self, user_id):
         with self.lock, self.db:
-            expired = self.db.execute("""UPDATE approvals SET status='expired'
+            self.db.execute("""UPDATE approvals SET status='expired'
                 WHERE user_id=? AND status IN ('pending','approved') AND expires_at<=?""",
                 (user_id, time.time()))
             rows = self.db.execute("""SELECT * FROM approvals
                 WHERE user_id=? AND status='pending' ORDER BY created_at""", (user_id,)).fetchall()
-        return [self._row(row) for row in rows]
+            return [self._row(row) for row in rows]
 
     def close(self):
         with self.lock:

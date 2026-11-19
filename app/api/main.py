@@ -39,32 +39,30 @@ def create_app(runtime=None, settings=None):
                 google_oauth_config=google_config,
                 credential_database=getattr(settings, "credential_database", None) if google_config else None,
                 credential_encryption_key=encryption_key if google_config else None,
+                enable_integration_goal_executor=getattr(settings, "integration_goal_executor_enabled", False),
             )
         else:
             app.state.paai_runtime = runtime
         yield
-        repository = getattr(app.state.paai_runtime, "auth_repository", None)
+        active_runtime = app.state.paai_runtime
+        repository = getattr(active_runtime, "auth_repository", None)
         if repository is not None and hasattr(repository, "close"):
             repository.close()
+        for manager_name in ("workflow_manager", "approvals"):
+            manager = getattr(active_runtime, manager_name, None)
+            if manager is not None and hasattr(manager, "close"):
+                manager.close()
 
     app = FastAPI(
-        title="PAAI API",
-        version="1.0.0",
-        lifespan=lifespan,
+        title="PAAI API", version="1.0.0", lifespan=lifespan,
         docs_url="/docs" if settings.docs_enabled else None,
-        redoc_url=None,
-        openapi_url="/openapi.json" if settings.docs_enabled else None,
+        redoc_url=None, openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
-    app.add_middleware(
-        RequestControls,
-        max_body_bytes=settings.max_request_bytes,
-        requests_per_minute=settings.requests_per_minute,
-    )
+    app.add_middleware(RequestControls, max_body_bytes=settings.max_request_bytes,
+                       requests_per_minute=settings.requests_per_minute)
     if settings.cors_origins:
         app.add_middleware(
-            CORSMiddleware,
-            allow_origins=settings.cors_origins,
-            allow_credentials=True,
+            CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
             allow_methods=["GET", "POST", "DELETE"],
             allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         )
@@ -75,12 +73,8 @@ def create_app(runtime=None, settings=None):
     app.include_router(workflows.router)
     app.include_router(permissions.router)
     app.include_router(google_oauth.router)
-    app.add_api_route(
-        "/auth/google/callback",
-        google_oauth.google_callback,
-        methods=["GET"],
-        include_in_schema=False,
-    )
+    app.add_api_route("/auth/google/callback", google_oauth.google_callback,
+                      methods=["GET"], include_in_schema=False)
     return app
 
 
