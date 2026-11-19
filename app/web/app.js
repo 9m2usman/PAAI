@@ -181,7 +181,11 @@ async function loadPermissions() {
   target.textContent = "Loading permissions…";
   try {
     const permissions = await api("/api/v1/permissions");
-    const entries = Array.isArray(permissions) ? permissions : (permissions.permissions || []);
+    const entries = Array.isArray(permissions)
+      ? permissions
+      : Object.entries(permissions || {}).flatMap(([integration, actions]) =>
+          (Array.isArray(actions) ? actions : []).map((action) => ({ integration, action }))
+        );
     if (!entries.length) {
       target.textContent = "No integration permissions granted yet.";
       return;
