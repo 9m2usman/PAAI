@@ -54,12 +54,15 @@ def create_phase5_runtime(
     google_oauth_config=None,
     enable_browser=False,
     browser_allowed_domains=None,
-    browser_headless=True
+    browser_headless=True,
+    credential_manager=None,
+    permission_manager=None,
+    oauth_manager=None
 ):
 
     integration_registry = IntegrationRegistry()
-    credential_manager = CredentialManager()
-    permission_manager = PermissionManager()
+    credential_manager = credential_manager or CredentialManager()
+    permission_manager = permission_manager or PermissionManager()
     approval_manager = ApprovalManager()
     risk_evaluator = RiskEvaluator()
     audit_logger = AuditLogger()
@@ -67,9 +70,7 @@ def create_phase5_runtime(
     if google_oauth_config is None:
         google_oauth_config = load_google_oauth_config()
 
-    oauth_manager = None
-
-    if google_oauth_config:
+    if google_oauth_config and oauth_manager is None:
 
         required_oauth_fields = {
             "client_id",
