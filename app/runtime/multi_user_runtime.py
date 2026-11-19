@@ -33,9 +33,7 @@ class MultiUserRuntime:
         self.token_service = TokenService(token_secret, token_lifetime_seconds)
         self.auth = AuthService(self.auth_repository, self.token_service)
         self.profiles = ProfileService(auth_database)
-        self.memory = AuthenticatedMemoryService(
-            memory_database if memory_database is not None else None
-        )
+        self.memory = AuthenticatedMemoryService(memory_database if memory_database is not None else None)
         self.credentials = CredentialManager(
             database_path=credential_database,
             encryption_key=credential_encryption_key,
@@ -51,10 +49,8 @@ class MultiUserRuntime:
         self.permissions = PermissionManager()
         self.autonomy_policy = AutonomyPolicy()
         self.goal_repository = GoalRepository(autonomy_database)
-        self.goals = GoalService(self.goal_repository, self.autonomy_policy)
-        self.triggers = TriggerRegistry(
-            max_payload_bytes=self.autonomy_policy.max_event_payload_bytes
-        )
+        self.triggers = TriggerRegistry(max_payload_bytes=self.autonomy_policy.max_event_payload_bytes)
+        self.goals = GoalService(self.goal_repository, self.autonomy_policy, self.triggers)
         self.autonomy_engine = AutonomyEngine(
             self.goal_repository,
             autonomy_executor or ReasoningGoalExecutor(),
