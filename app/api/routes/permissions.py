@@ -31,6 +31,8 @@ def grant_permission(payload: PermissionGrantRequest, request: Request,
 def revoke_permission(integration: str, action: str, request: Request,
                       identity=Depends(authenticated_identity)):
     runtime = get_runtime(request)
+    integration = integration.strip().lower()
+    action = action.strip().lower()
     try:
         connector = runtime.phase5_runtime["integration_registry"].get(integration)
         if action not in connector.get_supported_actions():
