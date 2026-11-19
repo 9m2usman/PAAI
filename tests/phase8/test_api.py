@@ -7,8 +7,19 @@ from types import SimpleNamespace
 os.environ.setdefault("PAAI_AUTH_SECRET", "test-secret-for-import-only-1234567890")
 
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 from app.api.main import create_app
 from app.runtime.multi_user_runtime import MultiUserRuntime
+
+class FakeApprovalConnector:
+    name = "demo"
+
+    def get_supported_actions(self):
+        return ["create"]
+
+    def execute(self, action, parameters, credentials=None):
+        return {"created": parameters.get("name")}
+
 
 class ApiTests(unittest.TestCase):
     def test_authenticated_api_and_tenant_isolation(self):
@@ -81,5 +92,28 @@ class ApiTests(unittest.TestCase):
                     json={"event_id": "report-001", "event_type": "report.ready", "payload": {"report_id": "other"}},
                 )
                 self.assertEqual(other_tenant_event.json()["matched_goals"], 0)
+
+                runtime.phase5_runtime["integration_registry"].register(FakeApprovalConnector())
+                runtime.permissions.grant_permission(first.json()["user"]["user_id"], "demo", ["create"])
+                with patch(
+                    "app.agents.integration_workflow_agent.generate_response",
+                    return_value='{"goal":"Create a demo item","steps":[{"integration":"demo","action":"create","parameters":{"name":"approved-item"}}]}',
+                ):
+                    pending_workflow = client.post(
+                        "/api/v1/workflows",
+                        headers={"Authorization": "Bearer " + token_a},
+                        json={"request": "Create a demo item"},
+                    )
+                self.assertEqual(pending_workflow.status_code, 202)
+                pending_data = pending_workflow.json()["workflow"]
+                self.assertEqual(pending_data["status"], "awaiting_approval")
+                approval_id = pending_data["pending_approval"]["approval_id"]
+                resumed = client.post(
+                    "/api/v1/workflows/" + pending_data["workflow_id"] + "/approve",
+                    headers={"Authorization": "Bearer " + token_a},
+                    json={"approval_id": approval_id},
+                )
+                self.assertEqual(resumed.status_code, 200)
+                self.assertEqual(resumed.json()["status"], "completed")
                 unauthenticated = client.get("/api/v1/goals")
                 self.assertEqual(unauthenticated.status_code, 401)
