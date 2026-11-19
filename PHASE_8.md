@@ -17,7 +17,7 @@ A separate worker process loads the same runtime and iterates trusted principals
 - `app/api/dependencies.py`: bearer-token authentication and request-local identity scope.
 - `app/api/schemas.py`: bounded request/response models.
 - `app/api/routes/auth.py`: registration, login, current-user endpoint.\n- `app/api/routes/google_oauth.py`: authenticated connect/status/disconnect and state-bound OAuth callback.
-- `app/api/routes/goals.py`: create/list/get/pause/resume/cancel/run-now and run history.
+- `app/api/routes/goals.py`: create/list/get/pause/resume/cancel/run-now and run history.\n- `app/api/routes/events.py`: authenticated durable event ingestion for registered event-goal triggers.
 - `app/api/routes/health.py`: liveness and readiness.
 - Every goal route calls tenant-scoped services. No route accepts a user ID as proof of identity.
 
@@ -39,7 +39,7 @@ A separate worker process loads the same runtime and iterates trusted principals
 - `GET /api/v1/integrations/google/connect` (authenticated; returns Google authorization URL)\n- `GET /auth/google/callback` (Google redirect; validates one-time OAuth state)\n- `GET /api/v1/integrations/google/status` (authenticated)\n- `DELETE /api/v1/integrations/google/disconnect` (authenticated)\n- `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
-- `POST /api/v1/goals`
+- `POST /api/v1/events` (authenticated; idempotent event ingestion and matching event-goal queue)\n- `POST /api/v1/goals`
 - `GET /api/v1/goals`
 - `GET /api/v1/goals/{goal_id}`
 - `POST /api/v1/goals/{goal_id}/pause`
@@ -82,7 +82,7 @@ Run the worker in a second PowerShell window:
 - Request-size middleware checks Content-Length; an upstream reverse proxy must also enforce body-size and connection limits.
 - Logging redaction is best-effort. Application code must never log raw credentials, prompts containing secrets, or authorization headers.
 - Google OAuth credentials are stored per user in `PAAI_CREDENTIAL_DATABASE`, encrypted at rest with `PAAI_CREDENTIAL_ENCRYPTION_KEY`. Back up the key separately; losing it makes stored credentials unrecoverable. OAuth authorization state is single-use and expires after ten minutes; pending state is currently process-local, so keep the API as one process during OAuth callback.
-- Approval APIs and durable workflow/approval/audit storage are not implemented in this phase.
+- Approval APIs and durable workflow/approval/audit storage are not implemented yet. The existing Phase 5 approval manager is process-local and is not yet connected to autonomy run resumption.
 - The default autonomy executor performs reasoning only. A trusted custom executor is required for external actions, and must use Phase 5 permissions and risk/approval controls.
 - Worker and API use SQLite and are intended for a single-host deployment. Multiple replicas need PostgreSQL and shared job leases/queue.
 - Token revocation, refresh-token rotation, email verification, password reset, and account lockout are not implemented.
@@ -101,7 +101,7 @@ The Phase 8 test module includes credential encryption round-trip/wrong-key test
 
 - [x] Authenticated FastAPI application and route modules authored.
 - [x] Request identity scope derived from verified bearer tokens.
-- [x] Authenticated goal operations and tenant checks.
+- [x] Authenticated goal operations and tenant checks.\n- [x] Authenticated durable event ingestion and event-goal dispatch.
 - [x] Health endpoints and basic request controls.
 - [x] Worker process entry point with per-account identity scope.
 - [x] Fernet encryption utility wired into persistent per-user Google credential storage.\n- [x] Google OAuth connect/callback/status/disconnect API routes.
