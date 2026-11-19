@@ -41,7 +41,7 @@ class MultiUserRuntime:
                 client_secret=google_oauth_config["client_secret"],
                 redirect_uri=google_oauth_config["redirect_uri"],
                 credential_manager=self.credentials)
-        self.permissions = PermissionManager()
+        self.permissions = PermissionManager(database_path=autonomy_database)
         self.phase5_runtime = create_phase5_runtime(
             google_oauth_config={}, credential_manager=self.credentials,
             permission_manager=self.permissions, oauth_manager=self.google_oauth,

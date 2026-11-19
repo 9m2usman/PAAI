@@ -1,10 +1,20 @@
+import sqlite3
 import threading
+from pathlib import Path
+
 
 class PermissionManager:
-    def __init__(self):
-        self.permissions = {}
-        self.automatic_permissions = {}
+    def __init__(self, database_path=None):
+        self.database_path = str(database_path) if database_path else ":memory:"
+        if self.database_path != ":memory:":
+            Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self.db = sqlite3.connect(self.database_path, timeout=20, check_same_thread=False)
+        self.db.execute("""CREATE TABLE IF NOT EXISTS integration_permissions (
+            user_id TEXT NOT NULL, integration TEXT NOT NULL, action TEXT NOT NULL,
+            automatic INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(user_id,integration,action))""")
+        self.db.commit()
 
     def grant_permission(self, user_id, integration, actions):
         if not isinstance(user_id, str) or not user_id.strip():
@@ -18,52 +28,57 @@ class PermissionManager:
             if not isinstance(action, str) or not action.strip():
                 raise ValueError("Invalid action.")
             valid.add(action.strip().lower())
-        key = (user_id, integration.strip().lower())
-        with self._lock:
-            self.permissions.setdefault(key, set()).update(valid)
+        with self._lock, self.db:
+            for action in valid:
+                self.db.execute("""INSERT OR IGNORE INTO integration_permissions
+                    (user_id,integration,action,automatic) VALUES(?,?,?,0)""",
+                    (user_id, integration.strip().lower(), action))
 
     def revoke_permission(self, user_id, integration, action):
-        key = (user_id, integration.strip().lower())
-        with self._lock:
-            actions = self.permissions.get(key)
-            if not actions or action.strip().lower() not in actions:
-                return False
-            actions.remove(action.strip().lower())
-            automatic = self.automatic_permissions.get(key, set())
-            automatic.discard(action.strip().lower())
-            return True
+        with self._lock, self.db:
+            cursor = self.db.execute("""DELETE FROM integration_permissions
+                WHERE user_id=? AND integration=? AND action=?""",
+                (user_id, integration.strip().lower(), action.strip().lower()))
+            return cursor.rowcount > 0
 
     def is_allowed(self, user_id, integration, action):
-        key = (user_id, integration.strip().lower())
         with self._lock:
-            return action.strip().lower() in self.permissions.get(key, set())
+            row = self.db.execute("""SELECT 1 FROM integration_permissions
+                WHERE user_id=? AND integration=? AND action=?""",
+                (user_id, integration.strip().lower(), action.strip().lower())).fetchone()
+            return row is not None
 
     def list_permissions(self, user_id):
         with self._lock:
-            return {
-                integration: sorted(actions)
-                for (stored_user_id, integration), actions in self.permissions.items()
-                if stored_user_id == user_id
-            }
+            rows = self.db.execute("""SELECT integration,action FROM integration_permissions
+                WHERE user_id=? ORDER BY integration,action""", (user_id,)).fetchall()
+        result = {}
+        for integration, action in rows:
+            result.setdefault(integration, []).append(action)
+        return result
 
     def grant_automatic_permission(self, user_id, integration, action):
-        key = (user_id, integration.strip().lower())
-        action = action.strip().lower()
-        with self._lock:
-            if action not in self.permissions.get(key, set()):
+        with self._lock, self.db:
+            cursor = self.db.execute("""UPDATE integration_permissions SET automatic=1
+                WHERE user_id=? AND integration=? AND action=?""",
+                (user_id, integration.strip().lower(), action.strip().lower()))
+            if cursor.rowcount != 1:
                 raise PermissionError("Tool permission must be granted first.")
-            self.automatic_permissions.setdefault(key, set()).add(action)
 
     def revoke_automatic_permission(self, user_id, integration, action):
-        key = (user_id, integration.strip().lower())
-        with self._lock:
-            actions = self.automatic_permissions.get(key)
-            if not actions or action.strip().lower() not in actions:
-                return False
-            actions.remove(action.strip().lower())
-            return True
+        with self._lock, self.db:
+            cursor = self.db.execute("""UPDATE integration_permissions SET automatic=0
+                WHERE user_id=? AND integration=? AND action=? AND automatic=1""",
+                (user_id, integration.strip().lower(), action.strip().lower()))
+            return cursor.rowcount > 0
 
     def is_automatic_allowed(self, user_id, integration, action):
-        key = (user_id, integration.strip().lower())
         with self._lock:
-            return action.strip().lower() in self.automatic_permissions.get(key, set())
+            row = self.db.execute("""SELECT 1 FROM integration_permissions
+                WHERE user_id=? AND integration=? AND action=? AND automatic=1""",
+                (user_id, integration.strip().lower(), action.strip().lower())).fetchone()
+            return row is not None
+
+    def close(self):
+        with self._lock:
+            self.db.close()

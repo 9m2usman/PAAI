@@ -6,6 +6,7 @@ from app.approvals.approval_manager import ApprovalManager
 from app.workflows.workflow_manager import WorkflowManager
 from app.autonomy.goal_repository import GoalRepository
 from app.autonomy.approval_bridge import AutonomyApprovalBridge
+from app.security.permission_manager import PermissionManager
 from app.identity.context import identity_scope
 from app.auth.token_service import TokenService
 
@@ -27,6 +28,19 @@ class DurableApprovalTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_permissions_survive_manager_restart_and_remain_tenant_scoped(self):
+        first = PermissionManager(database_path=self.db)
+        first.grant_permission("owner-a", "gmail", ["send_email"])
+        first.grant_automatic_permission("owner-a", "gmail", "send_email")
+        first.close()
+        second = PermissionManager(database_path=self.db)
+        self.assertTrue(second.is_allowed("owner-a", "gmail", "send_email"))
+        self.assertTrue(second.is_automatic_allowed("owner-a", "gmail", "send_email"))
+        self.assertFalse(second.is_allowed("owner-b", "gmail", "send_email"))
+        second.revoke_permission("owner-a", "gmail", "send_email")
+        self.assertFalse(second.is_allowed("owner-a", "gmail", "send_email"))
+        second.close()
 
     def test_approval_survives_manager_restart_and_is_single_use(self):
         first = ApprovalManager(database_path=self.db)

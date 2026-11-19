@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -19,10 +20,15 @@ class AutonomyApprovalBridge:
                 status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
             db.execute("CREATE INDEX IF NOT EXISTS idx_approval_links_owner ON autonomy_approval_links(owner_id,status)")
 
+    @contextmanager
     def _connect(self):
         db = sqlite3.connect(self.database_path, timeout=20)
         db.row_factory = sqlite3.Row
-        return db
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def pause_run_for_approval(self, run_id, goal_id, workflow_id):
         owner = current_identity().user_id
