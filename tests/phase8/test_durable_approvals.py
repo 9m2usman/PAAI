@@ -42,6 +42,25 @@ class DurableApprovalTests(unittest.TestCase):
         self.assertFalse(second.is_allowed("owner-a", "gmail", "send_email"))
         second.close()
 
+    def test_inflight_workflow_is_marked_uncertain_after_restart(self):
+        approvals = ApprovalManager(database_path=self.db)
+        workflow = WorkflowManager(FakeExecution(approvals), database_path=self.db)
+        state = {
+            "workflow_id": "wf-running", "user_id": "owner-a",
+            "steps": [{"integration": "gmail", "action": "send_email", "parameters": {}}],
+            "current_step": 0, "results": [], "status": "executing",
+        }
+        with workflow.db:
+            workflow._save(state)
+        workflow.close()
+        restarted = WorkflowManager(FakeExecution(approvals), database_path=self.db)
+        recovered = restarted.get_workflow("owner-a", "wf-running")
+        self.assertEqual(recovered["status"], "execution_uncertain")
+        with self.assertRaises(RuntimeError):
+            restarted._continue_workflow("wf-running", "owner-a")
+        restarted.close()
+        approvals.close()
+
     def test_approval_survives_manager_restart_and_is_single_use(self):
         first = ApprovalManager(database_path=self.db)
         action = {"integration": "gmail", "action": "send_email", "parameters": {"to": "a@example.com"}}

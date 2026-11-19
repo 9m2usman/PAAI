@@ -48,7 +48,7 @@ def create_app(runtime=None, settings=None):
         repository = getattr(active_runtime, "auth_repository", None)
         if repository is not None and hasattr(repository, "close"):
             repository.close()
-        for manager_name in ("workflow_manager", "approvals"):
+        for manager_name in ("workflow_manager", "approvals", "permissions"):
             manager = getattr(active_runtime, manager_name, None)
             if manager is not None and hasattr(manager, "close"):
                 manager.close()

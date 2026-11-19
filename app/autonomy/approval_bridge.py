@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from datetime import timedelta
 from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime, timezone
@@ -60,8 +61,8 @@ class AutonomyApprovalBridge:
         owner = current_identity().user_id
         if workflow_status not in {"completed", "rejected", "failed"}:
             return None
-        final_status = "completed" if workflow_status == "completed" else "failed"
-        now = datetime.now(timezone.utc).isoformat()
+        now_dt = datetime.now(timezone.utc)
+        now = now_dt.isoformat()
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             link = db.execute("""SELECT * FROM autonomy_approval_links
@@ -77,9 +78,23 @@ class AutonomyApprovalBridge:
                 (final_status, now, json.dumps(result, default=str) if result is not None else None,
                  "Workflow rejected by user." if workflow_status == "rejected" else None,
                  link["run_id"], owner))
-            db.execute("""UPDATE autonomy_goals SET status=?,last_result=?,updated_at=?
+            goal = db.execute("""SELECT interval_seconds,trigger_type,pending_event_json
+                FROM autonomy_goals WHERE goal_id=? AND owner_id=?""",
+                (link["goal_id"], owner)).fetchone()
+            next_status = final_status
+            next_run_at = None
+            if workflow_status == "completed" and goal is not None:
+                if goal["interval_seconds"]:
+                    next_status = "active"
+                    next_run_at = (now_dt + timedelta(seconds=goal["interval_seconds"])).isoformat()
+                elif goal["trigger_type"] == "event" and goal["pending_event_json"]:
+                    import json as json_module
+                    if json_module.loads(goal["pending_event_json"]):
+                        next_status = "active"
+                        next_run_at = now
+            db.execute("""UPDATE autonomy_goals SET status=?,next_run_at=?,last_result=?,updated_at=?
                 WHERE goal_id=? AND owner_id=? AND status='awaiting_approval'""",
-                (final_status, json.dumps(result, default=str) if result is not None else None,
+                (next_status, next_run_at, json.dumps(result, default=str) if result is not None else None,
                  now, link["goal_id"], owner))
             db.execute("""UPDATE autonomy_approval_links SET status=?,updated_at=?
                 WHERE workflow_id=? AND owner_id=? AND status='pending'""",
