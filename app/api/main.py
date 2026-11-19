@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import auth, goals, health, events
-from app.api.routes import google_oauth, workflows
+from app.api.routes import google_oauth, workflows, permissions
 from app.production.settings import get_settings
 from app.production.logging import configure_logging
 from app.production.middleware import RequestControls
@@ -73,6 +73,7 @@ def create_app(runtime=None, settings=None):
     app.include_router(goals.router)
     app.include_router(events.router)
     app.include_router(workflows.router)
+    app.include_router(permissions.router)
     app.include_router(google_oauth.router)
     app.add_api_route(
         "/auth/google/callback",
