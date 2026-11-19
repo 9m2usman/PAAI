@@ -39,6 +39,12 @@ class ApiTests(unittest.TestCase):
             )
             app = create_app(runtime=runtime, settings=settings)
             with TestClient(app) as client:
+                dashboard = client.get("/")
+                self.assertEqual(dashboard.status_code, 200)
+                self.assertIn("PAAI", dashboard.text)
+                dashboard_script = client.get("/dashboard/app.js")
+                self.assertEqual(dashboard_script.status_code, 200)
+                self.assertIn("api/v1/auth", dashboard_script.text)
                 first = client.post("/api/v1/auth/register", json={
                     "email": "first@example.com",
                     "password": "a-secure-password-123",
@@ -112,6 +118,18 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(pending_workflow.status_code, 202)
                 pending_data = pending_workflow.json()["workflow"]
                 self.assertEqual(pending_data["status"], "awaiting_approval")
+                pending_for_owner = client.get(
+                    "/api/v1/workflows/pending",
+                    headers={"Authorization": "Bearer " + token_a},
+                )
+                self.assertEqual(pending_for_owner.status_code, 200)
+                self.assertEqual(len(pending_for_owner.json()), 1)
+                pending_for_other = client.get(
+                    "/api/v1/workflows/pending",
+                    headers={"Authorization": "Bearer " + token_b},
+                )
+                self.assertEqual(pending_for_other.status_code, 200)
+                self.assertEqual(pending_for_other.json(), [])
                 approval_id = pending_data["pending_approval"]["approval_id"]
                 resumed = client.post(
                     "/api/v1/workflows/" + pending_data["workflow_id"] + "/approve",
