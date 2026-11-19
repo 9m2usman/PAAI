@@ -82,3 +82,9 @@ class PermissionManager:
     def close(self):
         with self._lock:
             self.db.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass

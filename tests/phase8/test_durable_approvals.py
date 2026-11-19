@@ -105,7 +105,7 @@ class DurableApprovalTests(unittest.TestCase):
         workflow.close()
         restarted = WorkflowManager(FakeExecution(approvals), database_path=self.db)
         self.assertEqual(restarted.get_workflow("owner-a", "wf-1")["status"], "awaiting_approval")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PermissionError):
             restarted.get_workflow("owner-b", "wf-1")
         restarted.close()
         approvals.close()
