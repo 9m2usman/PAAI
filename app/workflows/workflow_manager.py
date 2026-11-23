@@ -124,6 +124,15 @@ class WorkflowManager:
         with self.lock:
             return deepcopy(self._load(user_id, workflow_id))
 
+    def list_pending_workflows(self, user_id):
+        """Return only this user's workflows that are waiting for a decision."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT state_json FROM workflows WHERE user_id=? AND status='awaiting_approval' ORDER BY created_at",
+                (user_id,),
+            ).fetchall()
+            return [json.loads(row["state_json"]) for row in rows]
+
     def reject(self, user_id, workflow_id, approval_id):
         with self.lock:
             workflow = self._load(user_id, workflow_id)

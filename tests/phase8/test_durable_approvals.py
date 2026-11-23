@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from app.approvals.approval_manager import ApprovalManager
@@ -133,7 +134,7 @@ class DurableApprovalTests(unittest.TestCase):
             repository.request_run(goal["goal_id"])
             claim = repository.claim_due()[0]
         import json
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.execute("""CREATE TABLE IF NOT EXISTS workflows (
                 workflow_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, state_json TEXT NOT NULL,
                 status TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
